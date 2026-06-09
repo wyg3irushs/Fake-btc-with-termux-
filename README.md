@@ -4,22 +4,43 @@ The project consists of creating a fake BTC sending generator in the blockchain 
 
 ---
 
-## Institutional Liquidity Premium — TradingView Indicator
+## Institutional Liquidity Premium v2 — TradingView Indicator
 
-A professional-grade Pine Script v5 indicator that identifies **institutional liquidity zones** and visually expresses them as **premium/discount institutional levels** on TradingView.
+A clean, signal-based Pine Script v5 indicator that generates **BUY / SELL signals** with **visual trade setups** drawn live on the chart — entry price, stop loss, and 5 take-profit levels with automatic checkmarks.
+
+### What You See on the Chart
+
+When a signal fires, the indicator draws a **complete live trade setup**:
+
+```
+  ✅ TP5  72,450.00    ← auto-checked when hit
+  ✅ TP4  71,800.00    ← auto-checked when hit
+  ◻ TP3  71,200.00
+  ◻ TP2  70,800.00
+  ✅ TP1  70,500.00    ← auto-checked when hit
+  ▸ ENTRY 70,000.00    ← white solid line
+  ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+  ✖ SL   69,300.00    ← red dashed line
+```
+
+- **Green rectangle** = buy setup zone (entry → TP1)
+- **Red rectangle** = sell setup zone
+- Each **TP level** shows `◻` when pending, `✅` when price reaches it
+- **SL** turns `❌ SL HIT` if stopped out
+- **🏆 FULL TP** label when all 5 levels are hit
 
 ### Features
 
 | Module | Description |
 |---|---|
-| **Market Structure** | Detects Break of Structure (BOS) and Change of Character (CHoCH) using swing pivots |
-| **Premium / Discount Zones** | Highlights premium (overbought), discount (oversold), and equilibrium zones based on the institutional price range |
-| **Order Blocks (OB)** | Identifies bullish and bearish order blocks — the last opposing candle before a significant impulse move |
-| **Fair Value Gaps (FVG)** | Detects bullish and bearish imbalances (three-candle gaps). Supports auto-mitigation: FVGs are hidden once price fills them |
-| **Liquidity Levels** | Finds equal highs (buy-side liquidity) and equal lows (sell-side liquidity) via configurable tolerance matching |
-| **Liquidity Sweeps** | Detects when price wicks past a liquidity level and closes back inside — a classic institutional sweep pattern |
-| **Info Table** | Real-time dashboard showing current zone, trend, swing high/low, and equilibrium price |
-| **Alerts** | Built-in `alertcondition()` for BOS, CHoCH, Premium entry, and Discount entry |
+| **BUY / SELL Signals** | Based on BOS (Break of Structure) + EMA trend + RSI filter + volume spike confluence |
+| **Entry Price Label** | Exact entry price displayed next to the setup |
+| **Stop Loss** | ATR-based SL drawn as red dashed line with price label |
+| **5 TP Levels** | Configurable R:R ratios (default 1R, 1.5R, 2R, 3R, 4R), auto-checkmarked |
+| **Live Setup Box** | Green/red rectangle drawn from entry to TP1 — extends as trade progresses |
+| **Premium / Discount** | Subtle background shading shows institutional zones |
+| **Dashboard** | Trend, zone, RSI, and active setup count |
+| **Alerts** | `alertcondition()` for BUY and SELL signals |
 
 ### How to Install
 
@@ -31,23 +52,22 @@ A professional-grade Pine Script v5 indicator that identifies **institutional li
 
 ### Configurable Inputs
 
-All parameters are accessible via the indicator settings panel:
+| Group | Settings |
+|---|---|
+| **Signal Engine** | Swing lookback, ATR length & multiplier, TP1–TP5 R:R ratios |
+| **Confluence** | EMA filter (on/off + length), RSI filter (OB/OS levels), Volume spike multiplier |
+| **Design** | All colors customizable (buy, sell, SL, TP, entry, checkmarks, text) |
+| **Institutional Zones** | Premium/Discount background toggle, range lookback |
 
-- **Structure**: Swing lookback length, toggle BOS/CHoCH labels
-- **Premium / Discount**: Range lookback, zone colors
-- **Order Blocks**: Max displayed OBs, colors
-- **Fair Value Gaps**: Max displayed FVGs, colors, mitigation toggle
-- **Liquidity**: Equal high/low tolerance (%), lookback, sweep colors
-- **Display**: Toggle labels on/off, label size
-
-### Trading Logic (ICT / Smart Money Concepts)
+### Signal Logic
 
 ```
-1. Identify the range → Premium (top 25%) vs Discount (bottom 25%)
-2. Look for liquidity sweeps (equal highs/lows taken by wicks)
-3. After a sweep, look for a BOS or CHoCH confirming reversal
-4. Enter at an order block or FVG inside the discount/premium zone
-5. Target the opposite liquidity pool
+BUY  = Bullish BOS + Price > EMA + RSI < 70 + Volume Spike
+SELL = Bearish BOS + Price < EMA + RSI > 30 + Volume Spike
+
+Entry  = Close price at signal bar
+SL     = Entry ∓ ATR × Multiplier
+TP1-5  = Entry ± Risk × R:R ratio (1R, 1.5R, 2R, 3R, 4R)
 ```
 
 ### Disclaimer
