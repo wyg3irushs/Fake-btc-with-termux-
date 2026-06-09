@@ -1,9 +1,9 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © wyg3irushs — Institutional Liquidity Premium v5 (Full SMC System)
+// © wyg3irushs — Institutional Liquidity Premium v6 (Optimized SMC System)
 
 //@version=5
-indicator("Institutional Liquidity Premium v5", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Institutional Liquidity Premium v6", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ═══════════════════════════════════════════════════════
 // ██  INPUTS
@@ -23,6 +23,7 @@ i_minADX      = input.int(20,      "Min ADX",         minval=0,   maxval=50,  gr
 i_useADX      = input.bool(true,   "ADX Filter",      group="Signal Engine")
 i_useVolKill  = input.bool(true,   "ATR Vol Kill",    group="Signal Engine")
 i_useCandle   = input.bool(false,  "Candle Confirm",  group="Signal Engine")
+i_minRR       = input.float(0.0,   "Min Risk/Reward", minval=0.0, maxval=5.0, step=0.1, group="Signal Engine")
 
 // ── News Exclusion ──
 i_useNews     = input.bool(false,  "News Exclusion",         group="News Filter")
@@ -58,6 +59,8 @@ i_fvgRetest   = input.bool(true,   "FVG Retest Entry",           group="SMC Feat
 i_pdFilter    = input.bool(true,   "Premium/Discount Filter",    group="SMC Features")
 i_liqConfirm  = input.bool(true,   "Liquidity Grab Confirm",     group="SMC Features")
 i_eqTol       = input.float(0.1,   "Equal H/L Tolerance %", minval=0.01, maxval=1.0, step=0.01, group="SMC Features")
+i_showKillZ   = input.bool(false,  "Kill Zones (Liq+FVG+Disc)",  group="SMC Features")
+i_showLiqPool = input.bool(false,  "Liquidity Pools",            group="SMC Features")
 
 // ── Confluence ──
 i_useEMA      = input.bool(true,   "EMA Filter",      group="Confluence")
@@ -68,6 +71,19 @@ i_rsiOB       = input.float(70,    "RSI OB",          minval=50, maxval=95,  gro
 i_rsiOS       = input.float(30,    "RSI OS",          minval=5,  maxval=50,  group="Confluence")
 i_useVol      = input.bool(true,   "Volume Filter",   group="Confluence")
 i_volMult     = input.float(1.5,   "Vol Mult",        minval=1.0,maxval=5.0, step=0.1, group="Confluence")
+i_useBB       = input.bool(false,  "Bollinger Filter", group="Confluence")
+i_bbLen       = input.int(20,      "BB Length",        minval=5,  maxval=50,  group="Confluence")
+i_bbMult      = input.float(2.0,   "BB StdDev",       minval=0.5,maxval=4.0, step=0.1, group="Confluence")
+i_useVWAP     = input.bool(false,  "VWAP Filter",     group="Confluence")
+
+// ── Score Weights (customizable) ──
+i_wEMA        = input.int(15,  "EMA Weight",       minval=0, maxval=50, group="Scoring")
+i_wVol        = input.int(10,  "Volume Weight",    minval=0, maxval=50, group="Scoring")
+i_wFVG        = input.int(25,  "FVG Weight",       minval=0, maxval=50, group="Scoring")
+i_wOB         = input.int(25,  "OB Weight",        minval=0, maxval=50, group="Scoring")
+i_wLiq        = input.int(15,  "Liquidity Weight", minval=0, maxval=50, group="Scoring")
+i_wHTF        = input.int(20,  "HTF Weight",       minval=0, maxval=50, group="Scoring")
+i_wVWAP       = input.int(10,  "VWAP Weight",      minval=0, maxval=30, group="Scoring")
 
 // ── Multi-Timeframe ──
 i_useHTF      = input.bool(false,  "HTF Structure",   group="Multi-TF")
@@ -82,6 +98,7 @@ i_sessAsia    = input.bool(false,  "Asia",            group="Sessions")
 i_showSessBG  = input.bool(true,   "Session BG",      group="Sessions")
 
 // ── Design ──
+i_proTheme    = input.bool(false,  "Professional Theme (subdued)", group="Design")
 i_buyCol      = input.color(#00FF41, "Buy",           group="Design")
 i_sellCol     = input.color(#FF073A, "Sell",           group="Design")
 i_slCol       = input.color(#FF5252, "SL",             group="Design")
@@ -100,11 +117,25 @@ i_maxSetups   = input.int(5,        "Max Setups",      minval=1,  maxval=15,  gr
 i_showBox     = input.bool(true,    "Setup Box",       group="Design")
 i_showLabels  = input.bool(true,    "Price Labels",    group="Design")
 i_lineWidth   = input.int(1,        "Line Width",      minval=1,  maxval=4,   group="Design")
+i_showVWAP    = input.bool(false,   "Plot VWAP Line",  group="Design")
 
 // ── Zones ──
 i_showPD      = input.bool(true,   "Premium/Discount BG", group="Zones")
 i_showOTE     = input.bool(true,   "OTE Zone (62-79%)",   group="Zones")
 i_pdLen       = input.int(50,      "Range Lookback",   minval=10, maxval=200, group="Zones")
+
+// ═══════════════════════════════════════════════════════
+// ██  THEME — Professional Color Override
+// ═══════════════════════════════════════════════════════
+
+color buyC   = i_proTheme ? #2ECC71 : i_buyCol
+color sellC  = i_proTheme ? #E74C3C : i_sellCol
+color slC    = i_proTheme ? #C0392B : i_slCol
+color tpC    = i_proTheme ? #27AE60 : i_tpCol
+color obC    = i_proTheme ? #3498DB : i_obCol
+color fvgC   = i_proTheme ? #9B59B6 : i_fvgCol
+color cldBul = i_proTheme ? #2ECC71 : i_cloudCol1
+color cldBer = i_proTheme ? #E74C3C : i_cloudCol2
 
 // ═══════════════════════════════════════════════════════
 // ██  SCALPING OVERRIDES
@@ -169,22 +200,23 @@ rangeL   = ta.lowest(low,   i_pdLen)
 rangeMid = (rangeH + rangeL) / 2.0
 rangeQ   = (rangeH - rangeL) * 0.25
 
-// HTF data
-htfEma    = request.security(syminfo.tickerid, i_htfTF, ta.ema(close, i_htfEmaLen), lookahead=barmerge.lookahead_off)
-htfClose  = request.security(syminfo.tickerid, i_htfTF, close, lookahead=barmerge.lookahead_off)
+// ── VWAP ──
+vwapVal  = ta.vwap(hlc3)
 
-// Multi-TF dashboard data
-htf12hClose = request.security(syminfo.tickerid, "720", close, lookahead=barmerge.lookahead_off)
-htf12hEma   = request.security(syminfo.tickerid, "720", ta.ema(close, 20), lookahead=barmerge.lookahead_off)
-htf4hClose  = request.security(syminfo.tickerid, "240", close, lookahead=barmerge.lookahead_off)
-htf4hEma    = request.security(syminfo.tickerid, "240", ta.ema(close, 20), lookahead=barmerge.lookahead_off)
-htf1hClose  = request.security(syminfo.tickerid, "60",  close, lookahead=barmerge.lookahead_off)
-htf1hEma    = request.security(syminfo.tickerid, "60",  ta.ema(close, 20), lookahead=barmerge.lookahead_off)
-htfDClose   = request.security(syminfo.tickerid, "1D",  close, lookahead=barmerge.lookahead_off)
-htfDEma     = request.security(syminfo.tickerid, "1D",  ta.ema(close, 20), lookahead=barmerge.lookahead_off)
+// ── Bollinger Bands (logic only, no plot) ──
+bbBasis  = ta.sma(close, i_bbLen)
+bbDev    = ta.stdev(close, i_bbLen) * i_bbMult
+bbUpper  = bbBasis + bbDev
+bbLower  = bbBasis - bbDev
 
-// ── Premium / Discount / OTE (SMC: will use lastSH/lastSL_ from swing detection) ──
-// Placeholder — computed after swing detection section below
+// ── HTF Data (optimized: tuple returns reduce security calls) ──
+[htfClose, htfEma] = request.security(syminfo.tickerid, i_htfTF, [close, ta.ema(close, i_htfEmaLen)], lookahead=barmerge.lookahead_off)
+
+// Multi-TF dashboard data (4 calls instead of 8)
+[htfDClose, htfDEma]     = request.security(syminfo.tickerid, "1D",  [close, ta.ema(close, 20)], lookahead=barmerge.lookahead_off)
+[htf12hClose, htf12hEma] = request.security(syminfo.tickerid, "720", [close, ta.ema(close, 20)], lookahead=barmerge.lookahead_off)
+[htf4hClose, htf4hEma]   = request.security(syminfo.tickerid, "240", [close, ta.ema(close, 20)], lookahead=barmerge.lookahead_off)
+[htf1hClose, htf1hEma]   = request.security(syminfo.tickerid, "60",  [close, ta.ema(close, 20)], lookahead=barmerge.lookahead_off)
 
 // ── Volume Institutional ──
 relVol    = avgVol > 0 ? volume / avgVol : 0.0
@@ -328,7 +360,7 @@ if i_showFVG and bullFVG
         array.push(fvgBar, bar_index - 1)
         array.push(fvgDir, 1)
         array.push(fvgMit, false)
-        array.push(fvgBox, box.new(bar_index - 2, fTop, bar_index, fBot, border_color=color.new(i_buyCol, 60), bgcolor=color.new(i_buyCol, 90), border_width=1))
+        array.push(fvgBox, box.new(bar_index - 2, fTop, bar_index, fBot, border_color=color.new(buyC, 60), bgcolor=color.new(buyC, 90), border_width=1))
 
 if i_showFVG and bearFVG
     float fTop2 = low[2]
@@ -339,7 +371,7 @@ if i_showFVG and bearFVG
         array.push(fvgBar, bar_index - 1)
         array.push(fvgDir, -1)
         array.push(fvgMit, false)
-        array.push(fvgBox, box.new(bar_index - 2, fTop2, bar_index, fBot2, border_color=color.new(i_sellCol, 60), bgcolor=color.new(i_sellCol, 90), border_width=1))
+        array.push(fvgBox, box.new(bar_index - 2, fTop2, bar_index, fBot2, border_color=color.new(sellC, 60), bgcolor=color.new(sellC, 90), border_width=1))
 
 // FVG mitigation check
 var int fvgRetestBullBar = na
@@ -393,7 +425,7 @@ if i_showOB and bullOB
     array.push(obBar, bar_index - 1)
     array.push(obDir, 1)
     array.push(obMit, false)
-    array.push(obBox, box.new(bar_index - 1, oT, bar_index + 20, oB, border_color=color.new(i_obCol, 40), bgcolor=color.new(i_obCol, 88), border_width=1))
+    array.push(obBox, box.new(bar_index - 1, oT, bar_index + 20, oB, border_color=color.new(obC, 40), bgcolor=color.new(obC, 88), border_width=1))
 
 if i_showOB and bearOB
     float oT2 = math.max(open[1], close[1])
@@ -403,7 +435,7 @@ if i_showOB and bearOB
     array.push(obBar, bar_index - 1)
     array.push(obDir, -1)
     array.push(obMit, false)
-    array.push(obBox, box.new(bar_index - 1, oT2, bar_index + 20, oB2, border_color=color.new(i_sellCol, 40), bgcolor=color.new(i_sellCol, 88), border_width=1))
+    array.push(obBox, box.new(bar_index - 1, oT2, bar_index + 20, oB2, border_color=color.new(sellC, 40), bgcolor=color.new(sellC, 88), border_width=1))
 
 // OB mitigation + extend
 if array.size(obTop) > 0
@@ -432,7 +464,7 @@ while array.size(obTop) > 30
     box.delete(array.shift(obBox))
 
 // ═══════════════════════════════════════════════════════
-// ██  INSTITUTIONAL SCORE ENGINE
+// ██  INSTITUTIONAL SCORE ENGINE (customizable weights)
 // ═══════════════════════════════════════════════════════
 
 scoreUp = 0.0
@@ -462,24 +494,24 @@ if htf1hClose > htf1hEma
 if htf1hClose < htf1hEma
     mtfBearCount += 1
 
-// EMA trend (+15)
+// EMA trend (customizable weight)
 if close > emaVal
-    scoreUp += 15.0
+    scoreUp += i_wEMA
 if close < emaVal
-    scoreDn += 15.0
+    scoreDn += i_wEMA
 
-// Volume (+10)
+// Volume (customizable weight)
 if highVol
-    scoreUp += 10.0
-    scoreDn += 10.0
+    scoreUp += i_wVol
+    scoreDn += i_wVol
 
-// FVG present (+25)
+// FVG present (customizable weight)
 if fvgRetestBull
-    scoreUp += 25.0
+    scoreUp += i_wFVG
 if fvgRetestBear
-    scoreDn += 25.0
+    scoreDn += i_wFVG
 
-// OB nearby (+25)
+// OB nearby (customizable weight)
 obNearBull = false
 obNearBear = false
 if array.size(obTop) > 0
@@ -492,15 +524,15 @@ if array.size(obTop) > 0
                 obNearBear := true
 
 if obNearBull
-    scoreUp += 25.0
+    scoreUp += i_wOB
 if obNearBear
-    scoreDn += 25.0
+    scoreDn += i_wOB
 
-// Liquidity sweep (+15)
+// Liquidity sweep (customizable weight)
 if sslSwept
-    scoreUp += 15.0
+    scoreUp += i_wLiq
 if bslSwept
-    scoreDn += 15.0
+    scoreDn += i_wLiq
 
 // Premium/Discount zone bonus (+5)
 if inDisc
@@ -514,11 +546,17 @@ if rsiVal < rsOS + 10
 if rsiVal > rsOB - 10
     scoreDn += 5.0
 
-// HTF multi-timeframe alignment (+20, scaled by # of TFs)
-float mtfBullScore = mtfBullCount >= 3 ? 20.0 : mtfBullCount == 2 ? 12.0 : mtfBullCount == 1 ? 5.0 : 0.0
-float mtfBearScore = mtfBearCount >= 3 ? 20.0 : mtfBearCount == 2 ? 12.0 : mtfBearCount == 1 ? 5.0 : 0.0
+// HTF multi-timeframe alignment (customizable, scaled by # of TFs)
+float mtfBullScore = mtfBullCount >= 3 ? float(i_wHTF) : mtfBullCount == 2 ? float(i_wHTF) * 0.6 : mtfBullCount == 1 ? float(i_wHTF) * 0.25 : 0.0
+float mtfBearScore = mtfBearCount >= 3 ? float(i_wHTF) : mtfBearCount == 2 ? float(i_wHTF) * 0.6 : mtfBearCount == 1 ? float(i_wHTF) * 0.25 : 0.0
 scoreUp += mtfBullScore
 scoreDn += mtfBearScore
+
+// VWAP bonus (customizable weight)
+if i_useVWAP and close > vwapVal
+    scoreUp += i_wVWAP
+if i_useVWAP and close < vwapVal
+    scoreDn += i_wVWAP
 
 // Session bonus (+5)
 if londonSess or nySess
@@ -570,18 +608,39 @@ fvgOkDn = i_fvgRetest == false or fvgRetestBear or bearFVG
 mtfConfUp = i_useHTF == false or mtfOkUp
 mtfConfDn = i_useHTF == false or mtfOkDn
 
+// Bollinger Bands filter (avoid buying at upper, selling at lower)
+bbOkUp = i_useBB == false or close < bbUpper
+bbOkDn = i_useBB == false or close > bbLower
+
+// VWAP filter (buy above, sell below)
+vwapOkUp = i_useVWAP == false or close > vwapVal
+vwapOkDn = i_useVWAP == false or close < vwapVal
+
+// Risk/Reward filter
+float slDist  = atrVal * atMult
+float tp1Dist = slDist * r1
+float estRR   = slDist > 0 ? tp1Dist / slDist : 0.0
+rrOk = i_minRR <= 0 or estRR >= i_minRR
+
 // Cooldown
 var int lastSigBar = 0
 coolOk = bar_index - lastSigBar > cdBars
 
 // Final signals
-buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and pdOkUp and liqOkUp and fvgOkUp and coolOk and inSession and trendOk and volKillOk and candleOkUp and not newsBlock and mtfConfUp and finalScoreUp >= minSc
-sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and pdOkDn and liqOkDn and fvgOkDn and coolOk and inSession and trendOk and volKillOk and candleOkDn and not newsBlock and mtfConfDn and finalScoreDn >= minSc
+buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and pdOkUp and liqOkUp and fvgOkUp and coolOk and inSession and trendOk and volKillOk and candleOkUp and not newsBlock and mtfConfUp and finalScoreUp >= minSc and bbOkUp and vwapOkUp and rrOk
+sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and pdOkDn and liqOkDn and fvgOkDn and coolOk and inSession and trendOk and volKillOk and candleOkDn and not newsBlock and mtfConfDn and finalScoreDn >= minSc and bbOkDn and vwapOkDn and rrOk
 
 if buyGo or sellGo
     lastSigBar := bar_index
 
-// (FVG retest uses barssince, no reset needed)
+// ═══════════════════════════════════════════════════════
+// ██  WIN RATE TRACKING
+// ═══════════════════════════════════════════════════════
+
+var int   totalTrades = 0
+var int   winTrades   = 0
+var float totalProfit = 0.0
+var float totalLoss   = 0.0
 
 // ═══════════════════════════════════════════════════════
 // ██  SMC LABELS (BOS / CHoCH / Sweeps / EQ)
@@ -589,9 +648,9 @@ if buyGo or sellGo
 
 // BOS labels
 if bosUp and not chochUp
-    label.new(bar_index, high + atrVal * 0.2, "BOS", style=label.style_label_down, color=color.new(i_buyCol, 50), textcolor=i_txtCol, size=size.tiny)
+    label.new(bar_index, high + atrVal * 0.2, "BOS", style=label.style_label_down, color=color.new(buyC, 50), textcolor=i_txtCol, size=size.tiny)
 if bosDown and not chochDown
-    label.new(bar_index, low - atrVal * 0.2, "BOS", style=label.style_label_up, color=color.new(i_sellCol, 50), textcolor=i_txtCol, size=size.tiny)
+    label.new(bar_index, low - atrVal * 0.2, "BOS", style=label.style_label_up, color=color.new(sellC, 50), textcolor=i_txtCol, size=size.tiny)
 
 // CHoCH labels
 if i_showCHoCH and chochUp
@@ -601,17 +660,17 @@ if i_showCHoCH and chochDown
 
 // Liquidity sweep labels
 if i_showLiq and bslSweep
-    label.new(bar_index, high + atrVal * 0.15, "BSL Swept", style=label.style_label_down, color=color.new(i_sellCol, 40), textcolor=i_txtCol, size=size.tiny)
+    label.new(bar_index, high + atrVal * 0.15, "BSL Swept", style=label.style_label_down, color=color.new(sellC, 40), textcolor=i_txtCol, size=size.tiny)
 if i_showLiq and sslSweep
-    label.new(bar_index, low - atrVal * 0.15, "SSL Swept", style=label.style_label_up, color=color.new(i_buyCol, 40), textcolor=i_txtCol, size=size.tiny)
+    label.new(bar_index, low - atrVal * 0.15, "SSL Swept", style=label.style_label_up, color=color.new(buyC, 40), textcolor=i_txtCol, size=size.tiny)
 
 // Equal highs/lows lines
 if i_showEqHL and not na(eqHi) and not na(eqHiBar) and bar_index == eqHiBar
-    line.new(eqHiBar - 10, eqHi, eqHiBar + 20, eqHi, color=color.new(i_sellCol, 50), style=line.style_dotted, width=1)
-    label.new(eqHiBar, eqHi + atrVal * 0.1, "EQH", style=label.style_none, textcolor=color.new(i_sellCol, 30), size=size.tiny)
+    line.new(eqHiBar - 10, eqHi, eqHiBar + 20, eqHi, color=color.new(sellC, 50), style=line.style_dotted, width=1)
+    label.new(eqHiBar, eqHi + atrVal * 0.1, "EQH", style=label.style_none, textcolor=color.new(sellC, 30), size=size.tiny)
 if i_showEqHL and not na(eqLo) and not na(eqLoBar) and bar_index == eqLoBar
-    line.new(eqLoBar - 10, eqLo, eqLoBar + 20, eqLo, color=color.new(i_buyCol, 50), style=line.style_dotted, width=1)
-    label.new(eqLoBar, eqLo - atrVal * 0.1, "EQL", style=label.style_none, textcolor=color.new(i_buyCol, 30), size=size.tiny)
+    line.new(eqLoBar - 10, eqLo, eqLoBar + 20, eqLo, color=color.new(buyC, 50), style=line.style_dotted, width=1)
+    label.new(eqLoBar, eqLo - atrVal * 0.1, "EQL", style=label.style_none, textcolor=color.new(buyC, 30), size=size.tiny)
 
 // ═══════════════════════════════════════════════════════
 // ██  DYNAMIC LIQUIDITY TARGETS
@@ -744,7 +803,7 @@ createSetup(int dir) =>
     float t4 = dir == 1 ? ep + risk * r4 : ep - risk * r4
     float t5 = dir == 1 ? ep + risk * r5 : ep - risk * r5
     int   rE = bar_index + 30
-    color mC = dir == 1 ? i_buyCol : i_sellCol
+    color mC = dir == 1 ? buyC : sellC
     float sc = dir == 1 ? finalScoreUp : finalScoreDn
 
     array.push(s_bar, bar_index)
@@ -775,34 +834,34 @@ createSetup(int dir) =>
 
     // Lines
     array.push(d_ent, line.new(bar_index, ep, rE, ep, color=i_entCol, style=line.style_solid, width=lW+1))
-    array.push(d_sl,  line.new(bar_index, slP, rE, slP, color=i_slCol, style=line.style_dashed, width=lW+1))
-    array.push(d_t0,  tp0On ? line.new(bar_index, t0, rE, t0, color=color.new(i_tpCol, 30), style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
-    array.push(d_t1,  line.new(bar_index, t1, rE, t1, color=i_tpCol, style=line.style_dotted, width=lW))
-    array.push(d_t2,  line.new(bar_index, t2, rE, t2, color=i_tpCol, style=line.style_dotted, width=lW))
-    array.push(d_t3,  line.new(bar_index, t3, rE, t3, color=i_tpCol, style=line.style_dotted, width=lW))
-    array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
-    array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
+    array.push(d_sl,  line.new(bar_index, slP, rE, slP, color=slC, style=line.style_dashed, width=lW+1))
+    array.push(d_t0,  tp0On ? line.new(bar_index, t0, rE, t0, color=color.new(tpC, 30), style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
+    array.push(d_t1,  line.new(bar_index, t1, rE, t1, color=tpC, style=line.style_dotted, width=lW))
+    array.push(d_t2,  line.new(bar_index, t2, rE, t2, color=tpC, style=line.style_dotted, width=lW))
+    array.push(d_t3,  line.new(bar_index, t3, rE, t3, color=tpC, style=line.style_dotted, width=lW))
+    array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
+    array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
     // Signal label — STRONG floating text (no bg, like reference)
     string sTxt = "STRONG"
     float sY   = dir == 1 ? low - atrVal * 1.2 : high + atrVal * 1.2
-    color sigTxt = dir == 1 ? i_buyCol : i_sellCol
-    array.push(d_sig, label.new(bar_index, sY, sTxt, style=label.style_none, textcolor=sigTxt, size=size.normal))
+    color sigTxt = dir == 1 ? buyC : sellC
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=label.style_none, textcolor=sigTxt, size=size.normal, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
 
     // Score label (below STRONG)
-    color scCol = sc >= 80 ? i_buyCol : sc >= 50 ? #FFD700 : i_sellCol
+    color scCol2 = sc >= 80 ? buyC : sc >= 50 ? #FFD700 : sellC
     float scY   = dir == 1 ? low - atrVal * 1.8 : high + atrVal * 1.8
-    array.push(d_scr, label.new(bar_index, scY, str.tostring(sc, "#") + "%", style=label.style_none, textcolor=scCol, size=size.tiny))
+    array.push(d_scr, label.new(bar_index, scY, str.tostring(sc, "#") + "%", style=label.style_none, textcolor=scCol2, size=size.tiny))
 
     // Price labels
     array.push(d_eLbl, sLb ? label.new(rE, ep, "ENTRY " + str.tostring(ep, format.mintick), style=label.style_label_left, color=color.new(mC, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
-    array.push(d_sLbl, sLb ? label.new(rE, slP, "SL " + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(i_slCol, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
-    array.push(d_t0L,  sLb and tp0On ? label.new(rE, t0, "TP0 " + str.tostring(t0, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_t1L,  sLb ? label.new(rE, t1, "TP1 " + str.tostring(t1, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_t2L,  sLb ? label.new(rE, t2, "TP2 " + str.tostring(t2, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_t3L,  sLb ? label.new(rE, t3, "TP3 " + str.tostring(t3, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_t4L,  sLb and tp4On ? label.new(rE, t4, "TP4 " + str.tostring(t4, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_t5L,  sLb and tp5On ? label.new(rE, t5, "TP5 " + str.tostring(t5, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_sLbl, sLb ? label.new(rE, slP, "SL " + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(slC, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
+    array.push(d_t0L,  sLb and tp0On ? label.new(rE, t0, "TP0 " + str.tostring(t0, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t1L,  sLb ? label.new(rE, t1, "TP1 " + str.tostring(t1, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t2L,  sLb ? label.new(rE, t2, "TP2 " + str.tostring(t2, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t3L,  sLb ? label.new(rE, t3, "TP3 " + str.tostring(t3, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t4L,  sLb and tp4On ? label.new(rE, t4, "TP4 " + str.tostring(t4, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t5L,  sLb and tp5On ? label.new(rE, t5, "TP5 " + str.tostring(t5, format.mintick), style=label.style_label_left, color=color.new(tpC, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
     array.push(d_res, label.new(bar_index, ep, ""))
     true
 
@@ -819,7 +878,7 @@ while array.size(s_bar) > i_maxSetups
     removeOldest()
 
 // ═══════════════════════════════════════════════════════
-// ██  UPDATE ACTIVE SETUPS
+// ██  UPDATE ACTIVE SETUPS + WIN RATE TRACKING
 // ═══════════════════════════════════════════════════════
 
 if array.size(s_bar) > 0
@@ -871,14 +930,14 @@ if array.size(s_bar) > 0
                 if (isB and high >= array.get(s_tp0, i)) or (not isB and low <= array.get(s_tp0, i))
                     array.set(s_tp0H, i, true)
                     label.set_text(array.get(d_t0L, i), "V TP0")
-                    label.set_color(array.get(d_t0L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t0L, i), color.new(buyC, 20))
 
             // TP1 + BE
             if not array.get(s_tp1H, i)
                 if (isB and high >= array.get(s_tp1, i)) or (not isB and low <= array.get(s_tp1, i))
                     array.set(s_tp1H, i, true)
                     label.set_text(array.get(d_t1L, i), "V TP1")
-                    label.set_color(array.get(d_t1L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t1L, i), color.new(buyC, 20))
                     if bEv and not array.get(s_be, i)
                         array.set(s_be, i, true)
                         array.set(s_sl, i, entP)
@@ -891,21 +950,21 @@ if array.size(s_bar) > 0
                 if (isB and high >= array.get(s_tp2, i)) or (not isB and low <= array.get(s_tp2, i))
                     array.set(s_tp2H, i, true)
                     label.set_text(array.get(d_t2L, i), "V TP2")
-                    label.set_color(array.get(d_t2L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t2L, i), color.new(buyC, 20))
 
             // TP3
             if not array.get(s_tp3H, i)
                 if (isB and high >= array.get(s_tp3, i)) or (not isB and low <= array.get(s_tp3, i))
                     array.set(s_tp3H, i, true)
                     label.set_text(array.get(d_t3L, i), "V TP3")
-                    label.set_color(array.get(d_t3L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t3L, i), color.new(buyC, 20))
 
             // TP4
             if tp4On and not array.get(s_tp4H, i)
                 if (isB and high >= array.get(s_tp4, i)) or (not isB and low <= array.get(s_tp4, i))
                     array.set(s_tp4H, i, true)
                     label.set_text(array.get(d_t4L, i), "V TP4")
-                    label.set_color(array.get(d_t4L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t4L, i), color.new(buyC, 20))
 
             // TP5 (full)
             if tp5On and not array.get(s_tp5H, i)
@@ -913,22 +972,32 @@ if array.size(s_bar) > 0
                     array.set(s_tp5H, i, true)
                     array.set(s_cls, i, true)
                     label.set_text(array.get(d_t5L, i), "V TP5")
-                    label.set_color(array.get(d_t5L, i), color.new(i_buyCol, 20))
+                    label.set_color(array.get(d_t5L, i), color.new(buyC, 20))
                     float ry = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
                     label.delete(array.get(d_res, i))
-                    array.set(d_res, i, label.new(bar_index, ry, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
+                    array.set(d_res, i, label.new(bar_index, ry, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
+                    // Win rate tracking
+                    totalTrades += 1
+                    winTrades   += 1
+                    totalProfit += math.abs(array.get(s_tp5, i) - entP)
 
             // Close on highest visible TP
             if not tp5On and not tp4On and array.get(s_tp3H, i) and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
                 float ry2 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
                 label.delete(array.get(d_res, i))
-                array.set(d_res, i, label.new(bar_index, ry2, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
+                array.set(d_res, i, label.new(bar_index, ry2, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
+                totalTrades += 1
+                winTrades   += 1
+                totalProfit += math.abs(array.get(s_tp3, i) - entP)
             if not tp5On and tp4On and array.get(s_tp4H, i) and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
                 float ry3 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
                 label.delete(array.get(d_res, i))
-                array.set(d_res, i, label.new(bar_index, ry3, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
+                array.set(d_res, i, label.new(bar_index, ry3, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
+                totalTrades += 1
+                winTrades   += 1
+                totalProfit += math.abs(array.get(s_tp4, i) - entP)
 
             // SL hit
             if not array.get(s_slH, i) and not array.get(s_cls, i)
@@ -937,53 +1006,68 @@ if array.size(s_bar) > 0
                     array.set(s_slH, i, true)
                     array.set(s_cls, i, true)
                     label.set_text(array.get(d_sLbl, i), "X SL")
-                    label.set_color(array.get(d_sLbl, i), color.new(i_slCol, 10))
+                    label.set_color(array.get(d_sLbl, i), color.new(slC, 10))
                     line.set_color(array.get(d_ent, i), color.new(i_entCol, 70))
                     float ry4 = isB ? low - atrVal * 0.3 : high + atrVal * 0.3
                     label.delete(array.get(d_res, i))
-                    array.set(d_res, i, label.new(bar_index, ry4, "STOPPED", style=isB ? label.style_label_up : label.style_label_down, color=i_slCol, textcolor=i_txtCol, size=size.normal))
+                    array.set(d_res, i, label.new(bar_index, ry4, "STOPPED", style=isB ? label.style_label_up : label.style_label_down, color=slC, textcolor=i_txtCol, size=size.normal))
+                    // Loss tracking
+                    totalTrades += 1
+                    totalLoss   += math.abs(entP - cSL)
 
             // Expire
             if bar_index - array.get(s_bar, i) > 200 and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
 
 // ═══════════════════════════════════════════════════════
-// ██  BACKGROUND: Premium / Discount / OTE / Sessions
+// ██  BACKGROUND: Premium / Discount / OTE / Sessions / Kill Zones
 // ═══════════════════════════════════════════════════════
 
-bgcolor(i_showPD and inPrem ? color.new(i_sellCol, 95) : na, title="Premium")
-bgcolor(i_showPD and inDisc ? color.new(i_buyCol,  95) : na, title="Discount")
+bgcolor(i_showPD and inPrem ? color.new(sellC, 95) : na, title="Premium")
+bgcolor(i_showPD and inDisc ? color.new(buyC,  95) : na, title="Discount")
 bgcolor(i_showOTE and inOTE ? color.new(#FFC107, 95)   : na, title="OTE Zone")
 bgcolor(i_showSessBG and londonSess and i_sessLon ? color.new(#2196F3, 97) : na, title="London")
 bgcolor(i_showSessBG and nySess and i_sessNY      ? color.new(#FF9800, 97) : na, title="New York")
 bgcolor(i_showSessBG and asiaSess and i_sessAsia   ? color.new(#9C27B0, 97) : na, title="Asia")
+
+// Kill Zones (high probability reversal: Discount + Liq Swept + FVG Retest)
+killZoneBull = i_showKillZ and inDisc and sslSwept and fvgRetestBull
+killZoneBear = i_showKillZ and inPrem and bslSwept and fvgRetestBear
+bgcolor(killZoneBull ? color.new(buyC, 88) : killZoneBear ? color.new(sellC, 88) : na, title="Kill Zone")
+
+// Liquidity Pools (price trapped between levels)
+liqPoolBull = i_showLiqPool and low < rangeL and close > rangeMid
+liqPoolBear = i_showLiqPool and high > rangeH and close < rangeMid
+bgcolor(liqPoolBull ? color.new(buyC, 92) : liqPoolBear ? color.new(sellC, 92) : na, title="Liquidity Pool")
 
 // ═══════════════════════════════════════════════════════
 // ██  SUPERTREND CLOUD + PLOTS (1:1 reference style)
 // ═══════════════════════════════════════════════════════
 
 // Supertrend line
-color stColor = stDir == 1 ? color.new(i_cloudCol1, 0) : color.new(i_cloudCol2, 0)
+color stColor = stDir == 1 ? color.new(cldBul, 0) : color.new(cldBer, 0)
 pST    = plot(i_showCloud ? stLevel : na, "Supertrend", color=stColor, linewidth=2, style=plot.style_line)
 pClose = plot(i_showCloud ? close   : na, "Close (fill)", display=display.none)
-fill(pClose, pST, color=i_showCloud ? (stDir == 1 ? color.new(i_cloudCol1, 78) : color.new(i_cloudCol2, 78)) : na, title="Trend Cloud")
+fill(pClose, pST, color=i_showCloud ? (stDir == 1 ? color.new(cldBul, 78) : color.new(cldBer, 78)) : na, title="Trend Cloud")
 
 plot(i_useEMA ? emaVal : na, "EMA", color=color.new(#888888, 60), linewidth=1)
 plot(i_useHTF ? htfEma : na, "HTF EMA", color=color.new(color.orange, 50), linewidth=2)
 
+// VWAP (optional, OFF by default)
+plot(i_showVWAP ? vwapVal : na, "VWAP", color=color.new(#FF6B6B, 30), linewidth=2, style=plot.style_line)
+
 // ── Bar Coloring (like reference) ──
-barcolor(i_showBarCol ? (stDir == 1 ? i_cloudCol1 : i_cloudCol2) : na)
+barcolor(i_showBarCol ? (stDir == 1 ? cldBul : cldBer) : na)
 
 // ── Signal Dots — large orange/gold circles (like reference) ──
 plotshape(buyGo,  title="BUY Dot",  location=location.absolute, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal, offset=0)
 plotshape(sellGo, title="SELL Dot", location=location.absolute, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal, offset=0)
 
 // ── Small Arrows (green up, red down — like reference) ──
-plotshape(buyGo,  title="BUY Arrow",  location=location.belowbar, style=shape.arrowup,   color=color.new(i_buyCol, 0),  size=size.tiny)
-plotshape(sellGo, title="SELL Arrow", location=location.abovebar, style=shape.arrowdown, color=color.new(i_sellCol, 0), size=size.tiny)
+plotshape(buyGo,  title="BUY Arrow",  location=location.belowbar, style=shape.arrowup,   color=color.new(buyC, 0),  size=size.tiny)
+plotshape(sellGo, title="SELL Arrow", location=location.abovebar, style=shape.arrowdown, color=color.new(sellC, 0), size=size.tiny)
 
-// ── Momentum Line (magenta, bottom of chart — like reference) ──
-// RSI plotted as small circles on chart bottom (overlay=true can't use display.pane)
+// ── RSI (overlay=true can't use display.pane) ──
 plot(na, "RSI", color=color.new(#E040FB, 30), linewidth=1, editable=false, display=display.none)
 
 // ═══════════════════════════════════════════════════════
@@ -1017,7 +1101,7 @@ if not na(mpEntry) and mpDir != 0
         mpMax := pnl
         string mpTxt = (mpDir == 1 ? "Long Max Profit" : "Short Max Profit") + "\n+" + str.tostring(mpMax, "#.1") + "%"
         color  mpBg  = mpDir == 1 ? color.new(#004D1A, 20) : color.new(#4D0000, 20)
-        color  mpTc  = mpDir == 1 ? i_buyCol : i_sellCol
+        color  mpTc  = mpDir == 1 ? buyC : sellC
         float  mpY   = mpDir == 1 ? high + atrVal * 0.4 : low - atrVal * 0.4
         if i_showMaxPft
             if not na(mpLabel)
@@ -1028,19 +1112,18 @@ if not na(mpEntry) and mpDir != 0
                 mpLabel := label.new(bar_index, mpY, mpTxt, style=mpDir == 1 ? label.style_label_down : label.style_label_up, color=mpBg, textcolor=mpTc, size=size.small)
 
 // ═══════════════════════════════════════════════════════
-// ██  DASHBOARD
+// ██  DASHBOARD (compact 5x7, mobile optimized)
 // ═══════════════════════════════════════════════════════
 
-// ── Compact Dashboard (bottom-right, 5x7 optimized for mobile) ──
 var table dash = table.new(position.bottom_right, 5, 7, bgcolor=color.new(#0D0D0D, 5), border_width=1, border_color=color.new(#222222, 30))
 
 if barstate.islast
     string tTxt  = trend == 1 ? "BULL" : trend == -1 ? "BEAR" : "---"
-    color  tCol  = trend == 1 ? i_buyCol : trend == -1 ? i_sellCol : color.gray
+    color  tCol  = trend == 1 ? buyC : trend == -1 ? sellC : color.gray
     string zTxt  = inPrem ? "PREM" : inDisc ? "DISC" : inOTE ? "OTE" : "EQ"
-    color  zCol  = inPrem ? i_sellCol : inDisc ? i_buyCol : inOTE ? #FFD700 : color.gray
+    color  zCol  = inPrem ? sellC : inDisc ? buyC : inOTE ? #FFD700 : color.gray
     float  topSc = trend == 1 ? finalScoreUp : trend == -1 ? finalScoreDn : math.max(finalScoreUp, finalScoreDn)
-    color  scCol = topSc >= 80 ? i_buyCol : topSc >= 50 ? #FFD700 : i_sellCol
+    color  scCol = topSc >= 80 ? buyC : topSc >= 50 ? #FFD700 : sellC
 
     int aN = 0
     for j = 0 to math.max(array.size(s_bar) - 1, 0)
@@ -1049,15 +1132,20 @@ if barstate.islast
                 aN += 1
 
     // Multi-TF colors + bg
-    color d1bg  = htfDClose > htfDEma ? color.new(i_buyCol, 70) : color.new(i_sellCol, 70)
-    color h12bg = htf12hClose > htf12hEma ? color.new(i_buyCol, 70) : color.new(i_sellCol, 70)
-    color h4bg  = htf4hClose > htf4hEma ? color.new(i_buyCol, 70) : color.new(i_sellCol, 70)
-    color h1bg  = htf1hClose > htf1hEma ? color.new(i_buyCol, 70) : color.new(i_sellCol, 70)
+    color d1bg  = htfDClose > htfDEma ? color.new(buyC, 70) : color.new(sellC, 70)
+    color h12bg = htf12hClose > htf12hEma ? color.new(buyC, 70) : color.new(sellC, 70)
+    color h4bg  = htf4hClose > htf4hEma ? color.new(buyC, 70) : color.new(sellC, 70)
+    color h1bg  = htf1hClose > htf1hEma ? color.new(buyC, 70) : color.new(sellC, 70)
 
     // MTF Confirmation
     int mtfTotal = trend == 1 ? mtfBullCount : trend == -1 ? mtfBearCount : 0
     string mtfTxt = str.tostring(mtfTotal) + "/4 TF"
-    color  mtfCol = mtfTotal >= 3 ? i_buyCol : mtfTotal >= 2 ? #FFD700 : i_sellCol
+    color  mtfCol = mtfTotal >= 3 ? buyC : mtfTotal >= 2 ? #FFD700 : sellC
+
+    // Win Rate
+    float winRate = totalTrades > 0 ? float(winTrades) / float(totalTrades) * 100.0 : 0.0
+    float profitFactor = totalLoss > 0 ? totalProfit / totalLoss : 0.0
+    color wrCol  = winRate >= 60 ? buyC : winRate >= 40 ? #FFD700 : sellC
 
     // Row 0: TF headers
     table.cell(dash, 0, 0, "", text_size=size.tiny, bgcolor=color.new(#1A1A1A, 5))
@@ -1084,43 +1172,45 @@ if barstate.islast
     table.cell(dash, 3, 2, str.tostring(h4s, "#.1"),  text_color=#FFFFFF, text_size=size.tiny, bgcolor=h4bg)
     table.cell(dash, 4, 2, str.tostring(h1s, "#.1"),  text_color=#FFFFFF, text_size=size.tiny, bgcolor=h1bg)
 
-    // Row 3: MTF Confirmation bar
-    color confBg = mtfTotal >= 3 ? color.new(i_buyCol, 65) : mtfTotal >= 2 ? color.new(#FFD700, 65) : color.new(i_sellCol, 65)
+    // Row 3: MTF + Zone + Trend
+    color confBg = mtfTotal >= 3 ? color.new(buyC, 65) : mtfTotal >= 2 ? color.new(#FFD700, 65) : color.new(sellC, 65)
     table.cell(dash, 0, 3, "MTF", text_color=#888888, text_size=size.tiny, bgcolor=confBg)
     table.cell(dash, 1, 3, mtfTxt, text_color=#FFFFFF, text_size=size.tiny, bgcolor=confBg)
     table.cell(dash, 2, 3, tTxt, text_color=tCol, text_size=size.tiny, bgcolor=confBg)
     table.cell(dash, 3, 3, zTxt, text_color=zCol, text_size=size.tiny, bgcolor=confBg)
     table.cell(dash, 4, 3, "", bgcolor=confBg)
 
-    // Row 4: Score + Regime
+    // Row 4: Score + Regime + ADX
     string rgTxt = regime_trend ? "TREND" : regime_range ? "RANGE" : regime_vol ? "VOLAT" : "NORM"
-    color  rgCol = regime_trend ? i_buyCol : regime_range ? #FFD700 : regime_vol ? i_sellCol : color.gray
+    color  rgCol = regime_trend ? buyC : regime_range ? #FFD700 : regime_vol ? sellC : color.gray
     table.cell(dash, 0, 4, "Score", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 5))
     table.cell(dash, 1, 4, str.tostring(topSc, "#") + "%", text_color=scCol, text_size=size.tiny, bgcolor=color.new(scCol, 75))
     table.cell(dash, 2, 4, rgTxt, text_color=rgCol, text_size=size.tiny, bgcolor=color.new(#111111, 5))
-    table.cell(dash, 3, 4, "ADX " + str.tostring(adxVal, "#"), text_color=adxVal >= minADX ? i_buyCol : color.gray, text_size=size.tiny, bgcolor=color.new(#111111, 5))
+    table.cell(dash, 3, 4, "ADX " + str.tostring(adxVal, "#"), text_color=adxVal >= minADX ? buyC : color.gray, text_size=size.tiny, bgcolor=color.new(#111111, 5))
     table.cell(dash, 4, 4, "", bgcolor=color.new(#111111, 5))
 
-    // Row 5: RSI + Vol + Active
+    // Row 5: RSI + Vol + WinRate
     string vlTxt = climaxVol ? "CLX" : highVol ? "HI" : "NRM"
-    color  vlCol = climaxVol ? i_sellCol : highVol ? i_buyCol : color.gray
+    color  vlCol = climaxVol ? sellC : highVol ? buyC : color.gray
     table.cell(dash, 0, 5, "RSI", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
-    table.cell(dash, 1, 5, str.tostring(rsiVal, "#"), text_color=rsiVal > rsOB ? i_sellCol : rsiVal < rsOS ? i_buyCol : color.silver, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
+    table.cell(dash, 1, 5, str.tostring(rsiVal, "#"), text_color=rsiVal > rsOB ? sellC : rsiVal < rsOS ? buyC : color.silver, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
     table.cell(dash, 2, 5, "V:" + vlTxt, text_color=vlCol, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
-    table.cell(dash, 3, 5, str.tostring(aN) + " ON", text_color=aN > 0 ? i_buyCol : color.gray, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
-    table.cell(dash, 4, 5, "", bgcolor=color.new(#0D0D0D, 5))
+    table.cell(dash, 3, 5, "WR:" + str.tostring(winRate, "#") + "%", text_color=wrCol, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
+    table.cell(dash, 4, 5, str.tostring(aN) + " ON", text_color=aN > 0 ? buyC : color.gray, text_size=size.tiny, bgcolor=color.new(#0D0D0D, 5))
 
-    // Row 6: Mode + Risk
+    // Row 6: Mode + ATR% + Structure + PF
     string mTxt = i_scalpMode ? "SCALP" : "STD"
+    string pfTxt = totalLoss > 0 ? "PF:" + str.tostring(profitFactor, "#.1") : "PF:--"
+    color  pfCol = profitFactor > 1.5 ? buyC : profitFactor > 1.0 ? #FFD700 : color.gray
     table.cell(dash, 0, 6, mTxt, text_color=i_scalpMode ? #FFD700 : color.silver, text_size=size.tiny, bgcolor=color.new(#111111, 5))
-    table.cell(dash, 1, 6, str.tostring(atrPct, "#.2") + "%", text_color=atrPct > 0.5 ? i_buyCol : color.gray, text_size=size.tiny, bgcolor=color.new(#111111, 5))
+    table.cell(dash, 1, 6, str.tostring(atrPct, "#.2") + "%", text_color=atrPct > 0.5 ? buyC : color.gray, text_size=size.tiny, bgcolor=color.new(#111111, 5))
     string strTx = bosUp ? "BOS▲" : bosDown ? "BOS▼" : chochUp ? "CH▲" : chochDown ? "CH▼" : "---"
     table.cell(dash, 2, 6, strTx, text_color=tCol, text_size=size.tiny, bgcolor=color.new(#111111, 5))
-    table.cell(dash, 3, 6, "", bgcolor=color.new(#111111, 5))
+    table.cell(dash, 3, 6, pfTxt, text_color=pfCol, text_size=size.tiny, bgcolor=color.new(#111111, 5))
     table.cell(dash, 4, 6, "", bgcolor=color.new(#111111, 5))
 
 // ═══════════════════════════════════════════════════════
-// ██  ALERTS
+// ██  ALERTS (extended)
 // ═══════════════════════════════════════════════════════
 
 alertcondition(buyGo,    title="BUY Signal",   message="BUY — Institutional Liquidity Premium")
@@ -1129,3 +1219,11 @@ alertcondition(chochUp,  title="CHoCH Bullish", message="CHoCH Bullish — possi
 alertcondition(chochDown,title="CHoCH Bearish", message="CHoCH Bearish — possible trend reversal")
 alertcondition(bslSweep, title="BSL Swept",     message="Buy Side Liquidity Swept")
 alertcondition(sslSweep, title="SSL Swept",     message="Sell Side Liquidity Swept")
+alertcondition(bullFVG,  title="New Bullish FVG", message="New Bullish Fair Value Gap detected")
+alertcondition(bearFVG,  title="New Bearish FVG", message="New Bearish Fair Value Gap detected")
+alertcondition(bullOB,   title="New Bullish OB",  message="New Bullish Order Block detected")
+alertcondition(bearOB,   title="New Bearish OB",  message="New Bearish Order Block detected")
+alertcondition(htfDClose > htfDEma and htfDClose[1] <= htfDEma[1], title="HTF Bullish Shift", message="Daily turned Bullish (close > EMA)")
+alertcondition(htfDClose < htfDEma and htfDClose[1] >= htfDEma[1], title="HTF Bearish Shift", message="Daily turned Bearish (close < EMA)")
+alertcondition(killZoneBull, title="Kill Zone Bull", message="Bullish Kill Zone active (Disc+Liq+FVG)")
+alertcondition(killZoneBear, title="Kill Zone Bear", message="Bearish Kill Zone active (Prem+Liq+FVG)")
