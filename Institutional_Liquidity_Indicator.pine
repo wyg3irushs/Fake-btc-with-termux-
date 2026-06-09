@@ -5,65 +5,69 @@
 //@version=5
 indicator("Institutional Liquidity Premium v2", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
 // ██  INPUTS
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
 
-// — Signal Engine
-swingLen       = input.int(5,     "Swing Lookback",              minval=2,  maxval=50,  group="⚙️ Signal Engine")
-atrLen         = input.int(14,    "ATR Length (volatility)",     minval=5,  maxval=50,  group="⚙️ Signal Engine")
-atrMult        = input.float(1.5, "ATR Multiplier for SL",      minval=0.5,maxval=5.0, step=0.1, group="⚙️ Signal Engine")
-riskReward1    = input.float(1.0, "TP1 Risk:Reward",            minval=0.5,maxval=10,  step=0.5, group="⚙️ Signal Engine")
-riskReward2    = input.float(1.5, "TP2 Risk:Reward",            minval=0.5,maxval=10,  step=0.5, group="⚙️ Signal Engine")
-riskReward3    = input.float(2.0, "TP3 Risk:Reward",            minval=0.5,maxval=10,  step=0.5, group="⚙️ Signal Engine")
-riskReward4    = input.float(3.0, "TP4 Risk:Reward",            minval=0.5,maxval=10,  step=0.5, group="⚙️ Signal Engine")
-riskReward5    = input.float(4.0, "TP5 Risk:Reward",            minval=0.5,maxval=10,  step=0.5, group="⚙️ Signal Engine")
+// Signal Engine
+i_swingLen    = input.int(5,     "Swing Lookback",          minval=2,   maxval=50,  group="Signal Engine")
+i_atrLen      = input.int(14,    "ATR Length",              minval=5,   maxval=50,  group="Signal Engine")
+i_atrMult     = input.float(1.5, "ATR Multiplier (SL)",    minval=0.5, maxval=5.0, step=0.1, group="Signal Engine")
+i_rr1         = input.float(1.0, "TP1 Risk:Reward",        minval=0.5, maxval=10,  step=0.5, group="Signal Engine")
+i_rr2         = input.float(1.5, "TP2 Risk:Reward",        minval=0.5, maxval=10,  step=0.5, group="Signal Engine")
+i_rr3         = input.float(2.0, "TP3 Risk:Reward",        minval=0.5, maxval=10,  step=0.5, group="Signal Engine")
+i_rr4         = input.float(3.0, "TP4 Risk:Reward",        minval=0.5, maxval=10,  step=0.5, group="Signal Engine")
+i_rr5         = input.float(4.0, "TP5 Risk:Reward",        minval=0.5, maxval=10,  step=0.5, group="Signal Engine")
 
-// — Confluence Filters
-useEMA         = input.bool(true, "Use EMA Trend Filter",       group="🔍 Confluence")
-emaLen         = input.int(50,    "EMA Length",                  minval=10, maxval=200, group="🔍 Confluence")
-useRSI         = input.bool(true, "Use RSI Filter",             group="🔍 Confluence")
-rsiLen         = input.int(14,    "RSI Length",                  minval=5,  maxval=50,  group="🔍 Confluence")
-rsiOB          = input.int(70,    "RSI Overbought",             minval=60, maxval=90,  group="🔍 Confluence")
-rsiOS          = input.int(30,    "RSI Oversold",               minval=10, maxval=40,  group="🔍 Confluence")
-useVol         = input.bool(true, "Use Volume Spike Filter",    group="🔍 Confluence")
-volMult        = input.float(1.5, "Volume Spike Multiplier",    minval=1.0,maxval=5.0, step=0.1, group="🔍 Confluence")
+// Confluence
+i_useEMA      = input.bool(true, "EMA Trend Filter",       group="Confluence")
+i_emaLen      = input.int(50,    "EMA Length",              minval=10, maxval=200,  group="Confluence")
+i_useRSI      = input.bool(true, "RSI Filter",             group="Confluence")
+i_rsiLen      = input.int(14,    "RSI Length",              minval=5,  maxval=50,   group="Confluence")
+i_rsiOB       = input.float(70,  "RSI Overbought",         minval=60, maxval=90,   group="Confluence")
+i_rsiOS       = input.float(30,  "RSI Oversold",           minval=10, maxval=40,   group="Confluence")
+i_useVol      = input.bool(true, "Volume Spike Filter",    group="Confluence")
+i_volMult     = input.float(1.5, "Volume Multiplier",      minval=1.0,maxval=5.0, step=0.1, group="Confluence")
 
-// — Visual Design
-buyColor       = input.color(#00E676, "Buy Setup Color",        group="🎨 Design")
-sellColor      = input.color(#FF1744, "Sell Setup Color",        group="🎨 Design")
-slColor        = input.color(#FF5252, "Stop Loss Color",         group="🎨 Design")
-tpColor        = input.color(#69F0AE, "Take Profit Color",       group="🎨 Design")
-entryColor     = input.color(#FFFFFF, "Entry Line Color",         group="🎨 Design")
-checkColor     = input.color(#00E676, "TP Hit Checkmark Color",  group="🎨 Design")
-textCol        = input.color(#FFFFFF, "Text Color",              group="🎨 Design")
-maxSetups      = input.int(5,     "Max Active Setups on Chart",  minval=1,  maxval=20,  group="🎨 Design")
+// Design
+i_buyCol      = input.color(#00E676, "Buy Color",          group="Design")
+i_sellCol     = input.color(#FF1744, "Sell Color",          group="Design")
+i_slCol       = input.color(#FF5252, "Stop Loss Color",     group="Design")
+i_tpCol       = input.color(#69F0AE, "Take Profit Color",   group="Design")
+i_entCol      = input.color(#FFFFFF, "Entry Line Color",     group="Design")
+i_checkCol    = input.color(#00E676, "TP Hit Color",        group="Design")
+i_txtCol      = input.color(#FFFFFF, "Text Color",          group="Design")
+i_maxSetups   = input.int(5,     "Max Setups on Chart",     minval=1,  maxval=15,  group="Design")
 
-// — Premium / Discount (subtle background)
-showPD         = input.bool(true, "Show Premium/Discount Background", group="🏦 Institutional Zones")
-pdLookback     = input.int(50,    "Range Lookback",              minval=10, maxval=200, group="🏦 Institutional Zones")
+// Zones
+i_showPD      = input.bool(true, "Premium/Discount BG",    group="Zones")
+i_pdLen       = input.int(50,    "Range Lookback",          minval=10, maxval=200, group="Zones")
 
-// ─────────────────────────────────────────────
-// ██  CORE CALCULATIONS
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
+// ██  GLOBAL CALCULATIONS (must run every bar)
+// ─────────────────────────────────────────────────────
 
-atr    = ta.atr(atrLen)
-ema    = ta.ema(close, emaLen)
-rsi    = ta.rsi(close, rsiLen)
-avgVol = ta.sma(volume, 20)
+atrVal   = ta.atr(i_atrLen)
+emaVal   = ta.ema(close, i_emaLen)
+rsiVal   = ta.rsi(close, i_rsiLen)
+avgVol   = ta.sma(volume, 20)
+rangeH   = ta.highest(high, i_pdLen)
+rangeL   = ta.lowest(low,   i_pdLen)
+rangeMid = (rangeH + rangeL) / 2.0
+rangeQ   = (rangeH - rangeL) * 0.25
 
 // Swing detection
-swingHigh = ta.pivothigh(high, swingLen, swingLen)
-swingLow  = ta.pivotlow(low,  swingLen, swingLen)
+pivHi = ta.pivothigh(high, i_swingLen, i_swingLen)
+pivLo = ta.pivotlow(low,   i_swingLen, i_swingLen)
 
 var float lastSH = na
 var float lastSL = na
 var int   trend  = 0
 
-if not na(swingHigh)
-    lastSH := swingHigh
-if not na(swingLow)
-    lastSL := swingLow
+if not na(pivHi)
+    lastSH := pivHi
+if not na(pivLo)
+    lastSL := pivLo
 
 // Structure breaks
 bosUp   = not na(lastSH) and ta.crossover(close, lastSH)
@@ -74,345 +78,322 @@ if bosUp
 if bosDown
     trend := -1
 
-// Confluence filters
-emaUpOK   = not useEMA or close > ema
-emaDownOK = not useEMA or close < ema
-rsiUpOK   = not useRSI or rsi < rsiOB
-rsiDownOK = not useRSI or rsi > rsiOS
-volOK     = not useVol  or volume > avgVol * volMult
+// Confluence
+emaOkUp   = i_useEMA == false or close > emaVal
+emaOkDn   = i_useEMA == false or close < emaVal
+rsiOkUp   = i_useRSI == false or rsiVal < i_rsiOB
+rsiOkDn   = i_useRSI == false or rsiVal > i_rsiOS
+volOk     = i_useVol  == false or volume > avgVol * i_volMult
 
-// Fair Value Gap detection (clean — used as entry trigger)
-bullFVG = low > high[2] and close[1] > open[1]
-bearFVG = high < low[2] and close[1] < open[1]
+// Signals with cooldown
+var int lastSigBar = 0
+coolOk = bar_index - lastSigBar > i_swingLen * 2
 
-// ─────────────────────────────────────────────
-// ██  SIGNAL GENERATION
-// ─────────────────────────────────────────────
+buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and coolOk
+sellGo = bosDown and emaOkDn and rsiOkDn and volOk and coolOk
 
-// BUY: bullish BOS + bullish FVG within 3 bars + confluence
-buySignal  = bosUp   and emaUpOK   and rsiUpOK   and volOK
-// SELL: bearish BOS + bearish FVG within 3 bars + confluence
-sellSignal = bosDown and emaDownOK and rsiDownOK and volOK
+if buyGo or sellGo
+    lastSigBar := bar_index
 
-// Cooldown to avoid signal spam
-var int lastSignalBar = 0
-cooldown = bar_index - lastSignalBar > swingLen * 2
+// ─────────────────────────────────────────────────────
+// ██  TRADE SETUP STORAGE (parallel arrays)
+// ─────────────────────────────────────────────────────
 
-buyTrigger  = buySignal  and cooldown
-sellTrigger = sellSignal and cooldown
+var array<int>   s_bar     = array.new_int()
+var array<int>   s_dir     = array.new_int()       // 1=buy, -1=sell
+var array<float> s_entry   = array.new_float()
+var array<float> s_sl      = array.new_float()
+var array<float> s_tp1     = array.new_float()
+var array<float> s_tp2     = array.new_float()
+var array<float> s_tp3     = array.new_float()
+var array<float> s_tp4     = array.new_float()
+var array<float> s_tp5     = array.new_float()
+var array<bool>  s_tp1Hit  = array.new_bool()
+var array<bool>  s_tp2Hit  = array.new_bool()
+var array<bool>  s_tp3Hit  = array.new_bool()
+var array<bool>  s_tp4Hit  = array.new_bool()
+var array<bool>  s_tp5Hit  = array.new_bool()
+var array<bool>  s_slHit   = array.new_bool()
+var array<bool>  s_closed  = array.new_bool()
 
-if buyTrigger or sellTrigger
-    lastSignalBar := bar_index
+// Drawing arrays
+var array<box>   d_box     = array.new_box()
+var array<line>  d_entry   = array.new_line()
+var array<line>  d_sl      = array.new_line()
+var array<line>  d_tp1     = array.new_line()
+var array<line>  d_tp2     = array.new_line()
+var array<line>  d_tp3     = array.new_line()
+var array<line>  d_tp4     = array.new_line()
+var array<line>  d_tp5     = array.new_line()
+var array<label> d_entLbl  = array.new_label()
+var array<label> d_slLbl   = array.new_label()
+var array<label> d_tp1Lbl  = array.new_label()
+var array<label> d_tp2Lbl  = array.new_label()
+var array<label> d_tp3Lbl  = array.new_label()
+var array<label> d_tp4Lbl  = array.new_label()
+var array<label> d_tp5Lbl  = array.new_label()
+var array<label> d_sigLbl  = array.new_label()
+var array<label> d_resLbl  = array.new_label()
 
-// ─────────────────────────────────────────────
-// ██  USER-DEFINED TYPE: Trade Setup
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
+// ██  HELPER: delete oldest setup drawings
+// ─────────────────────────────────────────────────────
 
-type TradeSetup
-    int    barIdx
-    int    dir          // 1 = buy, -1 = sell
-    float  entry
-    float  sl
-    float  tp1
-    float  tp2
-    float  tp3
-    float  tp4
-    float  tp5
-    bool   tp1Hit
-    bool   tp2Hit
-    bool   tp3Hit
-    bool   tp4Hit
-    bool   tp5Hit
-    bool   slHit
-    bool   closed
-    // Drawing references
-    box    setupBox
-    line   entryLine
-    line   slLine
-    line   tp1Line
-    line   tp2Line
-    line   tp3Line
-    line   tp4Line
-    line   tp5Line
-    label  entryLabel
-    label  slLabel
-    label  tp1Label
-    label  tp2Label
-    label  tp3Label
-    label  tp4Label
-    label  tp5Label
-    label  signalLabel
-    label  resultLabel
+removeOldest() =>
+    if array.size(s_bar) > 0
+        array.shift(s_bar)
+        array.shift(s_dir)
+        array.shift(s_entry)
+        array.shift(s_sl)
+        array.shift(s_tp1)
+        array.shift(s_tp2)
+        array.shift(s_tp3)
+        array.shift(s_tp4)
+        array.shift(s_tp5)
+        array.shift(s_tp1Hit)
+        array.shift(s_tp2Hit)
+        array.shift(s_tp3Hit)
+        array.shift(s_tp4Hit)
+        array.shift(s_tp5Hit)
+        array.shift(s_slHit)
+        array.shift(s_closed)
+        box.delete(array.shift(d_box))
+        line.delete(array.shift(d_entry))
+        line.delete(array.shift(d_sl))
+        line.delete(array.shift(d_tp1))
+        line.delete(array.shift(d_tp2))
+        line.delete(array.shift(d_tp3))
+        line.delete(array.shift(d_tp4))
+        line.delete(array.shift(d_tp5))
+        label.delete(array.shift(d_entLbl))
+        label.delete(array.shift(d_slLbl))
+        label.delete(array.shift(d_tp1Lbl))
+        label.delete(array.shift(d_tp2Lbl))
+        label.delete(array.shift(d_tp3Lbl))
+        label.delete(array.shift(d_tp4Lbl))
+        label.delete(array.shift(d_tp5Lbl))
+        label.delete(array.shift(d_sigLbl))
+        label.delete(array.shift(d_resLbl))
+    true
 
-// ─────────────────────────────────────────────
-// ██  SETUP MANAGEMENT
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
+// ██  CREATE NEW SETUP
+// ─────────────────────────────────────────────────────
 
-var array<TradeSetup> setups = array.new<TradeSetup>()
+createNewSetup(int dir) =>
+    float ep     = close
+    float slDist = atrVal * i_atrMult
+    float slP    = dir == 1 ? ep - slDist : ep + slDist
+    float risk   = math.abs(ep - slP)
+    float t1     = dir == 1 ? ep + risk * i_rr1 : ep - risk * i_rr1
+    float t2     = dir == 1 ? ep + risk * i_rr2 : ep - risk * i_rr2
+    float t3     = dir == 1 ? ep + risk * i_rr3 : ep - risk * i_rr3
+    float t4     = dir == 1 ? ep + risk * i_rr4 : ep - risk * i_rr4
+    float t5     = dir == 1 ? ep + risk * i_rr5 : ep - risk * i_rr5
+    int   rEdge  = bar_index + 30
+    color mCol   = dir == 1 ? i_buyCol : i_sellCol
 
-// Create a new trade setup
-createSetup(int dir) =>
-    entryPrice = close
-    slDist     = atr * atrMult
-    slPrice    = dir == 1 ? entryPrice - slDist : entryPrice + slDist
-    risk       = math.abs(entryPrice - slPrice)
+    // Store data
+    array.push(s_bar, bar_index)
+    array.push(s_dir, dir)
+    array.push(s_entry, ep)
+    array.push(s_sl, slP)
+    array.push(s_tp1, t1)
+    array.push(s_tp2, t2)
+    array.push(s_tp3, t3)
+    array.push(s_tp4, t4)
+    array.push(s_tp5, t5)
+    array.push(s_tp1Hit, false)
+    array.push(s_tp2Hit, false)
+    array.push(s_tp3Hit, false)
+    array.push(s_tp4Hit, false)
+    array.push(s_tp5Hit, false)
+    array.push(s_slHit, false)
+    array.push(s_closed, false)
 
-    tp1Price = dir == 1 ? entryPrice + risk * riskReward1 : entryPrice - risk * riskReward1
-    tp2Price = dir == 1 ? entryPrice + risk * riskReward2 : entryPrice - risk * riskReward2
-    tp3Price = dir == 1 ? entryPrice + risk * riskReward3 : entryPrice - risk * riskReward3
-    tp4Price = dir == 1 ? entryPrice + risk * riskReward4 : entryPrice - risk * riskReward4
-    tp5Price = dir == 1 ? entryPrice + risk * riskReward5 : entryPrice - risk * riskReward5
+    // Draw setup box
+    float bxTop = dir == 1 ? t1 : ep
+    float bxBot = dir == 1 ? ep : t1
+    array.push(d_box, box.new(bar_index, bxTop, rEdge, bxBot, border_color=mCol, bgcolor=color.new(mCol, 88), border_width=1))
 
-    rightEdge = bar_index + 30
-    mainColor = dir == 1 ? buyColor : sellColor
+    // Draw lines
+    array.push(d_entry, line.new(bar_index, ep,  rEdge, ep,  color=i_entCol, style=line.style_solid,  width=2))
+    array.push(d_sl,    line.new(bar_index, slP, rEdge, slP, color=i_slCol,  style=line.style_dashed, width=2))
+    array.push(d_tp1,   line.new(bar_index, t1,  rEdge, t1,  color=i_tpCol,  style=line.style_dotted, width=1))
+    array.push(d_tp2,   line.new(bar_index, t2,  rEdge, t2,  color=i_tpCol,  style=line.style_dotted, width=1))
+    array.push(d_tp3,   line.new(bar_index, t3,  rEdge, t3,  color=i_tpCol,  style=line.style_dotted, width=1))
+    array.push(d_tp4,   line.new(bar_index, t4,  rEdge, t4,  color=i_tpCol,  style=line.style_dotted, width=1))
+    array.push(d_tp5,   line.new(bar_index, t5,  rEdge, t5,  color=i_tpCol,  style=line.style_dotted, width=1))
 
-    // Setup zone box (entry to TP1)
-    boxTop    = dir == 1 ? tp1Price   : entryPrice
-    boxBot    = dir == 1 ? entryPrice : tp1Price
-    sBox = box.new(bar_index, boxTop, rightEdge, boxBot, border_color=mainColor, bgcolor=color.new(mainColor, 88), border_width=1)
+    // Signal label
+    string sigTxt     = dir == 1 ? "BUY" : "SELL"
+    float sigY = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
+    array.push(d_sigLbl, label.new(bar_index, sigY, sigTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=mCol, textcolor=i_txtCol, size=size.large))
 
-    // Entry line
-    eLine = line.new(bar_index, entryPrice, rightEdge, entryPrice, color=entryColor, style=line.style_solid, width=2)
+    // Price labels
+    array.push(d_entLbl, label.new(rEdge, ep,  "ENTRY " + str.tostring(ep,  format.mintick), style=label.style_label_left, color=color.new(mCol, 30),    textcolor=i_txtCol, size=size.small))
+    array.push(d_slLbl,  label.new(rEdge, slP, "SL "    + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(i_slCol, 30), textcolor=i_txtCol, size=size.small))
+    array.push(d_tp1Lbl, label.new(rEdge, t1,  "TP1 "   + str.tostring(t1,  format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny))
+    array.push(d_tp2Lbl, label.new(rEdge, t2,  "TP2 "   + str.tostring(t2,  format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny))
+    array.push(d_tp3Lbl, label.new(rEdge, t3,  "TP3 "   + str.tostring(t3,  format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny))
+    array.push(d_tp4Lbl, label.new(rEdge, t4,  "TP4 "   + str.tostring(t4,  format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny))
+    array.push(d_tp5Lbl, label.new(rEdge, t5,  "TP5 "   + str.tostring(t5,  format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny))
 
-    // SL line
-    sLine = line.new(bar_index, slPrice, rightEdge, slPrice, color=slColor, style=line.style_dashed, width=2)
+    // Result label placeholder (na for now)
+    array.push(d_resLbl, label.new(bar_index, ep, ""))
+    true
 
-    // TP lines
-    t1Line = line.new(bar_index, tp1Price, rightEdge, tp1Price, color=tpColor, style=line.style_dotted, width=1)
-    t2Line = line.new(bar_index, tp2Price, rightEdge, tp2Price, color=tpColor, style=line.style_dotted, width=1)
-    t3Line = line.new(bar_index, tp3Price, rightEdge, tp3Price, color=tpColor, style=line.style_dotted, width=1)
-    t4Line = line.new(bar_index, tp4Price, rightEdge, tp4Price, color=tpColor, style=line.style_dotted, width=1)
-    t5Line = line.new(bar_index, tp5Price, rightEdge, tp5Price, color=tpColor, style=line.style_dotted, width=1)
+// ─────────────────────────────────────────────────────
+// ██  NEW SIGNALS
+// ─────────────────────────────────────────────────────
 
-    // Signal label (BUY / SELL)
-    sigStyle = dir == 1 ? label.style_label_up : label.style_label_down
-    sigY     = dir == 1 ? low - atr * 0.5 : high + atr * 0.5
-    sigText  = dir == 1 ? "🟢 BUY" : "🔴 SELL"
-    sigLbl   = label.new(bar_index, sigY, sigText, style=sigStyle, color=mainColor, textcolor=textCol, size=size.large)
+if buyGo
+    createNewSetup(1)
 
-    // Entry price label
-    entLbl = label.new(rightEdge, entryPrice, "▸ ENTRY  " + str.tostring(entryPrice, format.mintick), style=label.style_label_left, color=color.new(mainColor, 30), textcolor=textCol, size=size.small)
+if sellGo
+    createNewSetup(-1)
 
-    // SL label
-    slLbl = label.new(rightEdge, slPrice, "✖ SL  " + str.tostring(slPrice, format.mintick), style=label.style_label_left, color=color.new(slColor, 30), textcolor=textCol, size=size.small)
+// Trim oldest if over limit
+while array.size(s_bar) > i_maxSetups
+    removeOldest()
 
-    // TP labels
-    t1Lbl = label.new(rightEdge, tp1Price, "◻ TP1  " + str.tostring(tp1Price, format.mintick), style=label.style_label_left, color=color.new(tpColor, 50), textcolor=textCol, size=size.tiny)
-    t2Lbl = label.new(rightEdge, tp2Price, "◻ TP2  " + str.tostring(tp2Price, format.mintick), style=label.style_label_left, color=color.new(tpColor, 50), textcolor=textCol, size=size.tiny)
-    t3Lbl = label.new(rightEdge, tp3Price, "◻ TP3  " + str.tostring(tp3Price, format.mintick), style=label.style_label_left, color=color.new(tpColor, 50), textcolor=textCol, size=size.tiny)
-    t4Lbl = label.new(rightEdge, tp4Price, "◻ TP4  " + str.tostring(tp4Price, format.mintick), style=label.style_label_left, color=color.new(tpColor, 50), textcolor=textCol, size=size.tiny)
-    t5Lbl = label.new(rightEdge, tp5Price, "◻ TP5  " + str.tostring(tp5Price, format.mintick), style=label.style_label_left, color=color.new(tpColor, 50), textcolor=textCol, size=size.tiny)
+// ─────────────────────────────────────────────────────
+// ██  UPDATE ACTIVE SETUPS
+// ─────────────────────────────────────────────────────
 
-    setup = TradeSetup.new(
-     barIdx      = bar_index,
-     dir         = dir,
-     entry       = entryPrice,
-     sl          = slPrice,
-     tp1         = tp1Price,
-     tp2         = tp2Price,
-     tp3         = tp3Price,
-     tp4         = tp4Price,
-     tp5         = tp5Price,
-     tp1Hit      = false,
-     tp2Hit      = false,
-     tp3Hit      = false,
-     tp4Hit      = false,
-     tp5Hit      = false,
-     slHit       = false,
-     closed      = false,
-     setupBox    = sBox,
-     entryLine   = eLine,
-     slLine      = sLine,
-     tp1Line     = t1Line,
-     tp2Line     = t2Line,
-     tp3Line     = t3Line,
-     tp4Line     = t4Line,
-     tp5Line     = t5Line,
-     entryLabel  = entLbl,
-     slLabel     = slLbl,
-     tp1Label    = t1Lbl,
-     tp2Label    = t2Lbl,
-     tp3Label    = t3Lbl,
-     tp4Label    = t4Lbl,
-     tp5Label    = t5Lbl,
-     signalLabel = sigLbl,
-     resultLabel = label(na))
+if array.size(s_bar) > 0
+    for i = 0 to array.size(s_bar) - 1
+        if array.get(s_closed, i)
+            // skip closed setups — just leave drawings as-is
+            int _dummy = 0
+        else
+            int   rE    = bar_index + 5
+            int   d     = array.get(s_dir, i)
+            bool  isBuy = d == 1
 
-    setup
+            // Extend all drawings to current bar
+            box.set_right(array.get(d_box, i), rE)
+            line.set_x2(array.get(d_entry, i), rE)
+            line.set_x2(array.get(d_sl, i),    rE)
+            line.set_x2(array.get(d_tp1, i),   rE)
+            line.set_x2(array.get(d_tp2, i),   rE)
+            line.set_x2(array.get(d_tp3, i),   rE)
+            line.set_x2(array.get(d_tp4, i),   rE)
+            line.set_x2(array.get(d_tp5, i),   rE)
+            label.set_x(array.get(d_entLbl, i), rE)
+            label.set_x(array.get(d_slLbl, i),  rE)
+            label.set_x(array.get(d_tp1Lbl, i), rE)
+            label.set_x(array.get(d_tp2Lbl, i), rE)
+            label.set_x(array.get(d_tp3Lbl, i), rE)
+            label.set_x(array.get(d_tp4Lbl, i), rE)
+            label.set_x(array.get(d_tp5Lbl, i), rE)
 
-// Delete all drawings for a setup
-deleteSetup(TradeSetup s) =>
-    box.delete(s.setupBox)
-    line.delete(s.entryLine)
-    line.delete(s.slLine)
-    line.delete(s.tp1Line)
-    line.delete(s.tp2Line)
-    line.delete(s.tp3Line)
-    line.delete(s.tp4Line)
-    line.delete(s.tp5Line)
-    label.delete(s.entryLabel)
-    label.delete(s.slLabel)
-    label.delete(s.tp1Label)
-    label.delete(s.tp2Label)
-    label.delete(s.tp3Label)
-    label.delete(s.tp4Label)
-    label.delete(s.tp5Label)
-    label.delete(s.signalLabel)
-    label.delete(s.resultLabel)
+            // ── TP1 ──
+            if not array.get(s_tp1Hit, i)
+                if (isBuy and high >= array.get(s_tp1, i)) or (not isBuy and low <= array.get(s_tp1, i))
+                    array.set(s_tp1Hit, i, true)
+                    label.set_text(array.get(d_tp1Lbl, i), "V TP1 " + str.tostring(array.get(s_tp1, i), format.mintick))
+                    label.set_color(array.get(d_tp1Lbl, i), color.new(i_checkCol, 20))
 
-// ─────────────────────────────────────────────
-// ██  CREATE NEW SETUPS
-// ─────────────────────────────────────────────
+            // ── TP2 ──
+            if not array.get(s_tp2Hit, i)
+                if (isBuy and high >= array.get(s_tp2, i)) or (not isBuy and low <= array.get(s_tp2, i))
+                    array.set(s_tp2Hit, i, true)
+                    label.set_text(array.get(d_tp2Lbl, i), "V TP2 " + str.tostring(array.get(s_tp2, i), format.mintick))
+                    label.set_color(array.get(d_tp2Lbl, i), color.new(i_checkCol, 20))
 
-if buyTrigger
-    newSetup = createSetup(1)
-    array.push(setups, newSetup)
+            // ── TP3 ──
+            if not array.get(s_tp3Hit, i)
+                if (isBuy and high >= array.get(s_tp3, i)) or (not isBuy and low <= array.get(s_tp3, i))
+                    array.set(s_tp3Hit, i, true)
+                    label.set_text(array.get(d_tp3Lbl, i), "V TP3 " + str.tostring(array.get(s_tp3, i), format.mintick))
+                    label.set_color(array.get(d_tp3Lbl, i), color.new(i_checkCol, 20))
 
-if sellTrigger
-    newSetup = createSetup(-1)
-    array.push(setups, newSetup)
+            // ── TP4 ──
+            if not array.get(s_tp4Hit, i)
+                if (isBuy and high >= array.get(s_tp4, i)) or (not isBuy and low <= array.get(s_tp4, i))
+                    array.set(s_tp4Hit, i, true)
+                    label.set_text(array.get(d_tp4Lbl, i), "V TP4 " + str.tostring(array.get(s_tp4, i), format.mintick))
+                    label.set_color(array.get(d_tp4Lbl, i), color.new(i_checkCol, 20))
 
-// ─────────────────────────────────────────────
-// ██  UPDATE ACTIVE SETUPS (TP hits, SL hits)
-// ─────────────────────────────────────────────
+            // ── TP5 ──
+            if not array.get(s_tp5Hit, i)
+                if (isBuy and high >= array.get(s_tp5, i)) or (not isBuy and low <= array.get(s_tp5, i))
+                    array.set(s_tp5Hit, i, true)
+                    label.set_text(array.get(d_tp5Lbl, i), "V TP5 " + str.tostring(array.get(s_tp5, i), format.mintick))
+                    label.set_color(array.get(d_tp5Lbl, i), color.new(i_checkCol, 20))
+                    // All TPs hit
+                    array.set(s_closed, i, true)
+                    box.set_border_color(array.get(d_box, i), i_checkCol)
+                    box.set_bgcolor(array.get(d_box, i), color.new(i_checkCol, 90))
+                    float rY = isBuy ? high + atrVal * 0.3 : low - atrVal * 0.3
+                    label.delete(array.get(d_resLbl, i))
+                    array.set(d_resLbl, i, label.new(bar_index, rY, "FULL TP", style=isBuy ? label.style_label_down : label.style_label_up, color=i_checkCol, textcolor=color.black, size=size.normal))
 
-if array.size(setups) > 0
-    for i = array.size(setups) - 1 to 0
-        s = array.get(setups, i)
-        if s.closed
-            continue
+            // ── SL ──
+            if not array.get(s_slHit, i) and not array.get(s_closed, i)
+                if (isBuy and low <= array.get(s_sl, i)) or (not isBuy and high >= array.get(s_sl, i))
+                    array.set(s_slHit, i, true)
+                    array.set(s_closed, i, true)
+                    label.set_text(array.get(d_slLbl, i), "X SL " + str.tostring(array.get(s_sl, i), format.mintick))
+                    label.set_color(array.get(d_slLbl, i), color.new(i_slCol, 10))
+                    box.set_border_color(array.get(d_box, i), i_slCol)
+                    box.set_bgcolor(array.get(d_box, i), color.new(i_slCol, 92))
+                    line.set_color(array.get(d_entry, i), color.new(i_entCol, 70))
+                    float rY2 = isBuy ? low - atrVal * 0.3 : high + atrVal * 0.3
+                    label.delete(array.get(d_resLbl, i))
+                    array.set(d_resLbl, i, label.new(bar_index, rY2, "STOPPED", style=isBuy ? label.style_label_up : label.style_label_down, color=i_slCol, textcolor=i_txtCol, size=size.normal))
 
-        rightEdge = bar_index + 5
+            // Expire stale
+            if bar_index - array.get(s_bar, i) > 200 and not array.get(s_closed, i)
+                array.set(s_closed, i, true)
 
-        // Extend lines to current bar
-        box.set_right(s.setupBox, rightEdge)
-        line.set_x2(s.entryLine, rightEdge)
-        line.set_x2(s.slLine, rightEdge)
-        line.set_x2(s.tp1Line, rightEdge)
-        line.set_x2(s.tp2Line, rightEdge)
-        line.set_x2(s.tp3Line, rightEdge)
-        line.set_x2(s.tp4Line, rightEdge)
-        line.set_x2(s.tp5Line, rightEdge)
+// ─────────────────────────────────────────────────────
+// ██  PREMIUM / DISCOUNT BACKGROUND (global scope)
+// ─────────────────────────────────────────────────────
 
-        // Move labels to right edge
-        label.set_x(s.entryLabel, rightEdge)
-        label.set_x(s.slLabel, rightEdge)
-        label.set_x(s.tp1Label, rightEdge)
-        label.set_x(s.tp2Label, rightEdge)
-        label.set_x(s.tp3Label, rightEdge)
-        label.set_x(s.tp4Label, rightEdge)
-        label.set_x(s.tp5Label, rightEdge)
+bool inPrem = close > rangeMid + rangeQ
+bool inDisc = close < rangeMid - rangeQ
 
-        isBuy = s.dir == 1
+bgcolor(i_showPD and inPrem ? color.new(i_sellCol, 95) : na, title="Premium BG")
+bgcolor(i_showPD and inDisc ? color.new(i_buyCol,  95) : na, title="Discount BG")
 
-        // Check TP hits and update labels with checkmark ✅
-        if not s.tp1Hit and ((isBuy and high >= s.tp1) or (not isBuy and low <= s.tp1))
-            s.tp1Hit := true
-            label.set_text(s.tp1Label, "✅ TP1  " + str.tostring(s.tp1, format.mintick))
-            label.set_color(s.tp1Label, color.new(checkColor, 20))
+// ─────────────────────────────────────────────────────
+// ██  EMA LINE (global scope)
+// ─────────────────────────────────────────────────────
 
-        if not s.tp2Hit and ((isBuy and high >= s.tp2) or (not isBuy and low <= s.tp2))
-            s.tp2Hit := true
-            label.set_text(s.tp2Label, "✅ TP2  " + str.tostring(s.tp2, format.mintick))
-            label.set_color(s.tp2Label, color.new(checkColor, 20))
+plot(i_useEMA ? emaVal : na, "EMA", color=color.new(color.gray, 60), linewidth=1)
 
-        if not s.tp3Hit and ((isBuy and high >= s.tp3) or (not isBuy and low <= s.tp3))
-            s.tp3Hit := true
-            label.set_text(s.tp3Label, "✅ TP3  " + str.tostring(s.tp3, format.mintick))
-            label.set_color(s.tp3Label, color.new(checkColor, 20))
-
-        if not s.tp4Hit and ((isBuy and high >= s.tp4) or (not isBuy and low <= s.tp4))
-            s.tp4Hit := true
-            label.set_text(s.tp4Label, "✅ TP4  " + str.tostring(s.tp4, format.mintick))
-            label.set_color(s.tp4Label, color.new(checkColor, 20))
-
-        if not s.tp5Hit and ((isBuy and high >= s.tp5) or (not isBuy and low <= s.tp5))
-            s.tp5Hit := true
-            label.set_text(s.tp5Label, "✅ TP5  " + str.tostring(s.tp5, format.mintick))
-            label.set_color(s.tp5Label, color.new(checkColor, 20))
-            // All TPs hit — mark trade as complete
-            s.closed := true
-            box.set_border_color(s.setupBox, checkColor)
-            box.set_bgcolor(s.setupBox, color.new(checkColor, 90))
-            s.resultLabel := label.new(bar_index, isBuy ? high + atr * 0.3 : low - atr * 0.3, "🏆 FULL TP", style=isBuy ? label.style_label_down : label.style_label_up, color=checkColor, textcolor=color.black, size=size.normal)
-
-        // Check SL hit
-        if not s.slHit and ((isBuy and low <= s.sl) or (not isBuy and high >= s.sl))
-            s.slHit  := true
-            s.closed := true
-            label.set_text(s.slLabel, "❌ SL HIT  " + str.tostring(s.sl, format.mintick))
-            label.set_color(s.slLabel, color.new(slColor, 10))
-            box.set_border_color(s.setupBox, slColor)
-            box.set_bgcolor(s.setupBox, color.new(slColor, 92))
-            line.set_color(s.entryLine, color.new(entryColor, 70))
-            s.resultLabel := label.new(bar_index, isBuy ? low - atr * 0.3 : high + atr * 0.3, "❌ STOPPED", style=isBuy ? label.style_label_up : label.style_label_down, color=slColor, textcolor=textCol, size=size.normal)
-
-        // Close trade after too many bars (expire stale setups)
-        if bar_index - s.barIdx > 200 and not s.closed
-            s.closed := true
-
-        array.set(setups, i, s)
-
-// Limit total setups on chart
-while array.size(setups) > maxSetups
-    oldest = array.shift(setups)
-    deleteSetup(oldest)
-
-// ─────────────────────────────────────────────
-// ██  PREMIUM / DISCOUNT SUBTLE BACKGROUND
-// ─────────────────────────────────────────────
-
-if showPD
-    rangeH   = ta.highest(high, pdLookback)
-    rangeL   = ta.lowest(low,   pdLookback)
-    rangeMid = (rangeH + rangeL) / 2.0
-
-    inPrem = close > rangeMid + (rangeH - rangeL) * 0.25
-    inDisc = close < rangeMid - (rangeH - rangeL) * 0.25
-
-    bgcolor(inPrem ? color.new(sellColor, 95) : na, title="Premium BG")
-    bgcolor(inDisc ? color.new(buyColor,  95) : na, title="Discount BG")
-
-// ─────────────────────────────────────────────
-// ██  EMA TREND LINE (subtle)
-// ─────────────────────────────────────────────
-
-plot(useEMA ? ema : na, "EMA", color=color.new(color.gray, 60), linewidth=1)
-
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
 // ██  INFO DASHBOARD
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
 
-var table dash = table.new(position.top_right, 2, 4, bgcolor=color.new(#1a1a2e, 10), border_width=1, border_color=color.new(color.gray, 70), frame_width=1, frame_color=color.new(color.gray, 60))
+var table dash = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast
-    trendTxt = trend == 1 ? "BULLISH ▲" : trend == -1 ? "BEARISH ▼" : "NEUTRAL"
-    trendCol = trend == 1 ? buyColor : trend == -1 ? sellColor : color.gray
+    string tTxt = trend == 1 ? "BULLISH" : trend == -1 ? "BEARISH" : "NEUTRAL"
+    color  tCol = trend == 1 ? i_buyCol  : trend == -1 ? i_sellCol : color.gray
+    string zTxt = inPrem ? "PREMIUM" : inDisc ? "DISCOUNT" : "EQUILIBRIUM"
+    color  zCol = inPrem ? i_sellCol : inDisc ? i_buyCol   : color.gray
 
-    rangeH   = ta.highest(high, pdLookback)
-    rangeL   = ta.lowest(low,   pdLookback)
-    rangeMid = (rangeH + rangeL) / 2.0
-    zoneTxt  = close > rangeMid + (rangeH - rangeL) * 0.25 ? "PREMIUM ⚠️" : close < rangeMid - (rangeH - rangeL) * 0.25 ? "DISCOUNT 💰" : "EQUILIBRIUM"
-    zoneCol  = close > rangeMid + (rangeH - rangeL) * 0.25 ? sellColor : close < rangeMid - (rangeH - rangeL) * 0.25 ? buyColor : color.gray
+    int activeN = 0
+    for j = 0 to math.max(array.size(s_bar) - 1, 0)
+        if j < array.size(s_bar)
+            if not array.get(s_closed, j)
+                activeN += 1
 
-    activeCount = 0
-    if array.size(setups) > 0
-        for i = 0 to array.size(setups) - 1
-            if not array.get(setups, i).closed
-                activeCount += 1
+    table.cell(dash, 0, 0, "TREND",   text_color=color.gray,   text_size=size.tiny)
+    table.cell(dash, 1, 0, tTxt,      text_color=tCol,          text_size=size.small)
+    table.cell(dash, 0, 1, "ZONE",    text_color=color.gray,   text_size=size.tiny)
+    table.cell(dash, 1, 1, zTxt,      text_color=zCol,          text_size=size.small)
+    table.cell(dash, 0, 2, "RSI",     text_color=color.gray,   text_size=size.tiny)
+    table.cell(dash, 1, 2, str.tostring(rsiVal, "#.0"), text_color=rsiVal > i_rsiOB ? i_sellCol : rsiVal < i_rsiOS ? i_buyCol : color.silver, text_size=size.small)
+    table.cell(dash, 0, 3, "ACTIVE",  text_color=color.gray,   text_size=size.tiny)
+    table.cell(dash, 1, 3, str.tostring(activeN), text_color=color.silver, text_size=size.small)
 
-    table.cell(dash, 0, 0, "TREND",          text_color=color.gray,  text_size=size.tiny, text_halign=text.align_right)
-    table.cell(dash, 1, 0, trendTxt,          text_color=trendCol,    text_size=size.small, text_halign=text.align_left)
-    table.cell(dash, 0, 1, "ZONE",            text_color=color.gray,  text_size=size.tiny, text_halign=text.align_right)
-    table.cell(dash, 1, 1, zoneTxt,           text_color=zoneCol,     text_size=size.small, text_halign=text.align_left)
-    table.cell(dash, 0, 2, "RSI",             text_color=color.gray,  text_size=size.tiny, text_halign=text.align_right)
-    table.cell(dash, 1, 2, str.tostring(rsi, "#.0"), text_color=rsi > rsiOB ? sellColor : rsi < rsiOS ? buyColor : color.silver, text_size=size.small, text_halign=text.align_left)
-    table.cell(dash, 0, 3, "ACTIVE",          text_color=color.gray,  text_size=size.tiny, text_halign=text.align_right)
-    table.cell(dash, 1, 3, str.tostring(activeCount) + " setups", text_color=color.silver, text_size=size.small, text_halign=text.align_left)
+// ─────────────────────────────────────────────────────
+// ██  ALERTS (global scope)
+// ─────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────
-// ██  ALERTS
-// ─────────────────────────────────────────────
-
-alertcondition(buyTrigger,  title="BUY Signal",  message="🟢 BUY Signal — Institutional Liquidity Premium")
-alertcondition(sellTrigger, title="SELL Signal",  message="🔴 SELL Signal — Institutional Liquidity Premium")
+alertcondition(buyGo,  title="BUY Signal",  message="BUY Signal — Institutional Liquidity Premium")
+alertcondition(sellGo, title="SELL Signal",  message="SELL Signal — Institutional Liquidity Premium")
