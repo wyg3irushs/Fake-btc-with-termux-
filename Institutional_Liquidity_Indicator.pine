@@ -1,0 +1,439 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// https://mozilla.org/MPL/2.0/
+// © wyg3irushs — Institutional Liquidity Premium Indicator
+
+//@version=5
+indicator("Institutional Liquidity Premium", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// ─────────────────────────────────────────────
+// ██  INPUTS
+// ─────────────────────────────────────────────
+
+// — Swing Detection
+swingLen        = input.int(5,     "Swing Lookback Length",       minval=2, maxval=50,  group="Structure")
+showStructure   = input.bool(true, "Show Market Structure (BOS/CHoCH)", group="Structure")
+
+// — Premium / Discount
+showPremDisc    = input.bool(true, "Show Premium / Discount Zones",     group="Premium / Discount")
+premDiscLookback= input.int(50,    "Range Lookback (bars)",              minval=10, maxval=500, group="Premium / Discount")
+premColor       = input.color(color.new(color.red,   80), "Premium Color",  group="Premium / Discount")
+discColor       = input.color(color.new(color.green, 80), "Discount Color", group="Premium / Discount")
+eqColor         = input.color(color.new(color.gray,  85), "Equilibrium Color", group="Premium / Discount")
+
+// — Order Blocks
+showOB          = input.bool(true, "Show Order Blocks",           group="Order Blocks")
+obMaxBoxes      = input.int(10,    "Max OB Boxes on Chart",       minval=1, maxval=50,  group="Order Blocks")
+bullOBColor     = input.color(color.new(color.teal,  75), "Bullish OB Color", group="Order Blocks")
+bearOBColor     = input.color(color.new(color.red,   75), "Bearish OB Color", group="Order Blocks")
+
+// — Fair Value Gaps
+showFVG         = input.bool(true, "Show Fair Value Gaps (FVG)",  group="Fair Value Gaps")
+fvgMaxBoxes     = input.int(15,    "Max FVG Boxes on Chart",      minval=1, maxval=50,  group="Fair Value Gaps")
+bullFVGColor    = input.color(color.new(color.teal,  85), "Bullish FVG Color", group="Fair Value Gaps")
+bearFVGColor    = input.color(color.new(color.red,   85), "Bearish FVG Color", group="Fair Value Gaps")
+fvgMitigated    = input.bool(true, "Hide Mitigated FVGs",         group="Fair Value Gaps")
+
+// — Liquidity Levels
+showLiq         = input.bool(true, "Show Liquidity Levels",       group="Liquidity")
+liqEqualTol     = input.float(0.05,"Equal High/Low Tolerance (%)",minval=0.001, maxval=1.0, step=0.01, group="Liquidity")
+liqLookback     = input.int(20,    "Liquidity Lookback (bars)",   minval=5, maxval=100, group="Liquidity")
+bslColor        = input.color(color.new(color.red,   30), "Buy-Side Liquidity Color",  group="Liquidity")
+sslColor        = input.color(color.new(color.green, 30), "Sell-Side Liquidity Color", group="Liquidity")
+sweepColor      = input.color(color.new(color.orange,20), "Sweep Color",               group="Liquidity")
+
+// — Labels
+showLabels      = input.bool(true, "Show Labels", group="Display")
+labelSize       = input.string(size.small, "Label Size", options=[size.tiny, size.small, size.normal], group="Display")
+
+// ─────────────────────────────────────────────
+// ██  SWING DETECTION
+// ─────────────────────────────────────────────
+
+// Detect pivot highs and lows
+swingHigh = ta.pivothigh(high, swingLen, swingLen)
+swingLow  = ta.pivotlow(low,  swingLen, swingLen)
+
+// Track the most recent swing high and swing low values/bars
+var float lastSwingHigh     = na
+var int   lastSwingHighBar  = na
+var float lastSwingLow      = na
+var int   lastSwingLowBar   = na
+
+// Previous swing values (for structure tracking)
+var float prevSwingHigh     = na
+var float prevSwingLow      = na
+
+if not na(swingHigh)
+    prevSwingHigh   := lastSwingHigh
+    lastSwingHigh   := swingHigh
+    lastSwingHighBar:= bar_index - swingLen
+
+if not na(swingLow)
+    prevSwingLow    := lastSwingLow
+    lastSwingLow    := swingLow
+    lastSwingLowBar := bar_index - swingLen
+
+// ─────────────────────────────────────────────
+// ██  MARKET STRUCTURE (BOS / CHoCH)
+// ─────────────────────────────────────────────
+
+var int   trend         = 0   // 1 = bullish, -1 = bearish
+var float lastBOSLevel  = na
+
+// Break of Structure — bullish: close above last swing high
+bosUp   = not na(lastSwingHigh) and ta.crossover(close, lastSwingHigh)
+// Break of Structure — bearish: close below last swing low
+bosDown = not na(lastSwingLow)  and ta.crossunder(close, lastSwingLow)
+
+// Change of Character detection
+chochUp   = bosUp   and trend == -1
+chochDown = bosDown and trend ==  1
+
+if showStructure
+    if bosUp
+        trendLabel = chochUp ? "CHoCH ▲" : "BOS ▲"
+        trendColor = chochUp ? color.lime : color.teal
+        if showLabels
+            label.new(bar_index, low, trendLabel, style=label.style_label_up, color=trendColor, textcolor=color.white, size=labelSize)
+        trend := 1
+
+    if bosDown
+        trendLabel = chochDown ? "CHoCH ▼" : "BOS ▼"
+        trendColor = chochDown ? color.fuchsia : color.red
+        if showLabels
+            label.new(bar_index, high, trendLabel, style=label.style_label_down, color=trendColor, textcolor=color.white, size=labelSize)
+        trend := -1
+
+// ─────────────────────────────────────────────
+// ██  PREMIUM / DISCOUNT ZONES
+// ─────────────────────────────────────────────
+
+if showPremDisc
+    rangeHigh = ta.highest(high, premDiscLookback)
+    rangeLow  = ta.lowest(low,   premDiscLookback)
+    rangeMid  = (rangeHigh + rangeLow) / 2.0
+    range75   = rangeLow + (rangeHigh - rangeLow) * 0.75
+    range25   = rangeLow + (rangeHigh - rangeLow) * 0.25
+
+    // Premium zone (above 75% of range)
+    var box premBox = na
+    if not na(premBox)
+        box.delete(premBox)
+    premBox := box.new(bar_index - premDiscLookback, rangeHigh, bar_index, range75, bgcolor=premColor, border_color=color.new(color.red, 60), border_width=1)
+
+    // Discount zone (below 25% of range)
+    var box discBox = na
+    if not na(discBox)
+        box.delete(discBox)
+    discBox := box.new(bar_index - premDiscLookback, range25, bar_index, rangeLow, bgcolor=discColor, border_color=color.new(color.green, 60), border_width=1)
+
+    // Equilibrium line
+    var line eqLine = na
+    if not na(eqLine)
+        line.delete(eqLine)
+    eqLine := line.new(bar_index - premDiscLookback, rangeMid, bar_index, rangeMid, color=color.new(color.gray, 40), style=line.style_dashed, width=1)
+
+    // Equilibrium zone (light shade around 50%)
+    var box eqBox = na
+    if not na(eqBox)
+        box.delete(eqBox)
+    eqZoneHalf = (rangeHigh - rangeLow) * 0.05
+    eqBox := box.new(bar_index - premDiscLookback, rangeMid + eqZoneHalf, bar_index, rangeMid - eqZoneHalf, bgcolor=eqColor, border_color=na)
+
+    // Labels on the right edge
+    if showLabels and barstate.islast
+        var label premLbl = na, var label discLbl = na, var label eqLbl = na
+        if not na(premLbl)
+            label.delete(premLbl)
+        if not na(discLbl)
+            label.delete(discLbl)
+        if not na(eqLbl)
+            label.delete(eqLbl)
+        premLbl := label.new(bar_index + 3, (rangeHigh + range75) / 2, "PREMIUM",     style=label.style_label_left, color=color.new(color.red, 50),   textcolor=color.white, size=labelSize)
+        discLbl := label.new(bar_index + 3, (range25 + rangeLow) / 2,  "DISCOUNT",    style=label.style_label_left, color=color.new(color.green, 50), textcolor=color.white, size=labelSize)
+        eqLbl   := label.new(bar_index + 3, rangeMid,                   "EQUILIBRIUM", style=label.style_label_left, color=color.new(color.gray, 50),  textcolor=color.white, size=labelSize)
+
+// ─────────────────────────────────────────────
+// ██  ORDER BLOCKS
+// ─────────────────────────────────────────────
+
+// Arrays to manage order block boxes
+var array<box> bullOBBoxes = array.new_box()
+var array<box> bearOBBoxes = array.new_box()
+
+if showOB
+    // Bullish Order Block: last bearish candle before a bullish impulse
+    // Detected when we get a swing low pivot
+    if not na(swingLow)
+        // Find the last bearish candle at or before the swing low
+        obIdx = bar_index - swingLen
+        for i = 0 to swingLen
+            idx = bar_index - swingLen - i
+            if idx >= 0
+                cOpen  = open[swingLen + i]
+                cClose = close[swingLen + i]
+                cHigh  = high[swingLen + i]
+                cLow   = low[swingLen + i]
+                if cClose < cOpen  // bearish candle
+                    newBox = box.new(idx, cHigh, bar_index, cLow, bgcolor=bullOBColor, border_color=color.new(color.teal, 40), border_width=1)
+                    array.push(bullOBBoxes, newBox)
+                    if showLabels
+                        label.new(idx, cLow, "Bull OB", style=label.style_label_up, color=color.new(color.teal, 40), textcolor=color.white, size=labelSize)
+                    break
+
+        // Limit displayed boxes
+        while array.size(bullOBBoxes) > obMaxBoxes
+            box.delete(array.shift(bullOBBoxes))
+
+    // Bearish Order Block: last bullish candle before a bearish impulse
+    // Detected when we get a swing high pivot
+    if not na(swingHigh)
+        obIdx = bar_index - swingLen
+        for i = 0 to swingLen
+            idx = bar_index - swingLen - i
+            if idx >= 0
+                cOpen  = open[swingLen + i]
+                cClose = close[swingLen + i]
+                cHigh  = high[swingLen + i]
+                cLow   = low[swingLen + i]
+                if cClose > cOpen  // bullish candle
+                    newBox = box.new(idx, cHigh, bar_index, cLow, bgcolor=bearOBColor, border_color=color.new(color.red, 40), border_width=1)
+                    array.push(bearOBBoxes, newBox)
+                    if showLabels
+                        label.new(idx, cHigh, "Bear OB", style=label.style_label_down, color=color.new(color.red, 40), textcolor=color.white, size=labelSize)
+                    break
+
+        while array.size(bearOBBoxes) > obMaxBoxes
+            box.delete(array.shift(bearOBBoxes))
+
+    // Extend active OB boxes to the right
+    if array.size(bullOBBoxes) > 0
+        for i = 0 to array.size(bullOBBoxes) - 1
+            b = array.get(bullOBBoxes, i)
+            box.set_right(b, bar_index)
+
+    if array.size(bearOBBoxes) > 0
+        for i = 0 to array.size(bearOBBoxes) - 1
+            b = array.get(bearOBBoxes, i)
+            box.set_right(b, bar_index)
+
+// ─────────────────────────────────────────────
+// ██  FAIR VALUE GAPS (FVG)
+// ─────────────────────────────────────────────
+
+// Store FVG box references and their top/bottom for mitigation checks
+var array<box>   fvgBoxes   = array.new_box()
+var array<float> fvgTops    = array.new_float()
+var array<float> fvgBottoms = array.new_float()
+var array<int>   fvgDirs    = array.new_int()    // 1 = bullish, -1 = bearish
+
+if showFVG
+    // Bullish FVG: candle[2].high < candle[0].low  (gap up)
+    bullFVG = low > high[2] and close[1] > open[1]
+    // Bearish FVG: candle[2].low > candle[0].high  (gap down)
+    bearFVG = high < low[2] and close[1] < open[1]
+
+    if bullFVG
+        fvgTop    = low
+        fvgBottom = high[2]
+        newBox = box.new(bar_index - 2, fvgTop, bar_index, fvgBottom, bgcolor=bullFVGColor, border_color=color.new(color.teal, 50), border_width=1)
+        array.push(fvgBoxes,   newBox)
+        array.push(fvgTops,    fvgTop)
+        array.push(fvgBottoms, fvgBottom)
+        array.push(fvgDirs,    1)
+        if showLabels
+            label.new(bar_index - 1, fvgBottom, "FVG ▲", style=label.style_label_up, color=color.new(color.teal, 50), textcolor=color.white, size=labelSize)
+
+    if bearFVG
+        fvgTop    = low[2]
+        fvgBottom = high
+        newBox = box.new(bar_index - 2, fvgTop, bar_index, fvgBottom, bgcolor=bearFVGColor, border_color=color.new(color.red, 50), border_width=1)
+        array.push(fvgBoxes,   newBox)
+        array.push(fvgTops,    fvgTop)
+        array.push(fvgBottoms, fvgBottom)
+        array.push(fvgDirs,    -1)
+        if showLabels
+            label.new(bar_index - 1, fvgTop, "FVG ▼", style=label.style_label_down, color=color.new(color.red, 50), textcolor=color.white, size=labelSize)
+
+    // Limit FVG boxes
+    while array.size(fvgBoxes) > fvgMaxBoxes
+        box.delete(array.shift(fvgBoxes))
+        array.shift(fvgTops)
+        array.shift(fvgBottoms)
+        array.shift(fvgDirs)
+
+    // Mitigate FVGs: remove once price fills the gap
+    if fvgMitigated and array.size(fvgBoxes) > 0
+        for i = array.size(fvgBoxes) - 1 to 0
+            if i < array.size(fvgBoxes)
+                fTop = array.get(fvgTops,    i)
+                fBot = array.get(fvgBottoms, i)
+                dir  = array.get(fvgDirs,    i)
+                mitigated = false
+                if dir == 1     // bullish FVG mitigated when price drops into it
+                    mitigated := low <= fBot
+                else            // bearish FVG mitigated when price rises into it
+                    mitigated := high >= fTop
+                if mitigated
+                    box.delete(array.get(fvgBoxes, i))
+                    array.remove(fvgBoxes,   i)
+                    array.remove(fvgTops,    i)
+                    array.remove(fvgBottoms, i)
+                    array.remove(fvgDirs,    i)
+    
+    // Extend active FVG boxes
+    if array.size(fvgBoxes) > 0
+        for i = 0 to array.size(fvgBoxes) - 1
+            box.set_right(array.get(fvgBoxes, i), bar_index)
+
+// ─────────────────────────────────────────────
+// ██  LIQUIDITY LEVELS (Equal Highs / Lows)
+// ─────────────────────────────────────────────
+
+// Track swing highs and lows for liquidity pool detection
+var array<float> recentSwingHighs    = array.new_float()
+var array<int>   recentSwingHighBars = array.new_int()
+var array<float> recentSwingLows     = array.new_float()
+var array<int>   recentSwingLowBars  = array.new_int()
+
+var array<line>  bslLines   = array.new_line()
+var array<line>  sslLines   = array.new_line()
+var array<label> bslLabels  = array.new_label()
+var array<label> sslLabels  = array.new_label()
+
+if showLiq
+    // Record new swing highs
+    if not na(swingHigh)
+        array.push(recentSwingHighs,    swingHigh)
+        array.push(recentSwingHighBars, bar_index - swingLen)
+        // Keep only recent swings
+        while array.size(recentSwingHighs) > liqLookback
+            array.shift(recentSwingHighs)
+            array.shift(recentSwingHighBars)
+
+    // Record new swing lows
+    if not na(swingLow)
+        array.push(recentSwingLows,    swingLow)
+        array.push(recentSwingLowBars, bar_index - swingLen)
+        while array.size(recentSwingLows) > liqLookback
+            array.shift(recentSwingLows)
+            array.shift(recentSwingLowBars)
+
+    // Detect equal highs (buy-side liquidity)
+    if not na(swingHigh) and array.size(recentSwingHighs) >= 2
+        currHigh = swingHigh
+        for i = 0 to array.size(recentSwingHighs) - 2
+            prevH = array.get(recentSwingHighs, i)
+            pctDiff = math.abs(currHigh - prevH) / currHigh * 100
+            if pctDiff <= liqEqualTol
+                eqLevel = math.max(currHigh, prevH)
+                prevBar = array.get(recentSwingHighBars, i)
+                newLine = line.new(prevBar, eqLevel, bar_index + 20, eqLevel, color=bslColor, style=line.style_dotted, width=2)
+                array.push(bslLines, newLine)
+                if showLabels
+                    newLbl = label.new(bar_index + 20, eqLevel, "BSL $$$", style=label.style_label_left, color=color.new(color.red, 30), textcolor=color.white, size=labelSize)
+                    array.push(bslLabels, newLbl)
+                break
+
+    // Detect equal lows (sell-side liquidity)
+    if not na(swingLow) and array.size(recentSwingLows) >= 2
+        currLow = swingLow
+        for i = 0 to array.size(recentSwingLows) - 2
+            prevL = array.get(recentSwingLows, i)
+            pctDiff = math.abs(currLow - prevL) / currLow * 100
+            if pctDiff <= liqEqualTol
+                eqLevel = math.min(currLow, prevL)
+                prevBar = array.get(recentSwingLowBars, i)
+                newLine = line.new(prevBar, eqLevel, bar_index + 20, eqLevel, color=sslColor, style=line.style_dotted, width=2)
+                array.push(sslLines, newLine)
+                if showLabels
+                    newLbl = label.new(bar_index + 20, eqLevel, "SSL $$$", style=label.style_label_left, color=color.new(color.green, 30), textcolor=color.white, size=labelSize)
+                    array.push(sslLabels, newLbl)
+                break
+
+    // Detect liquidity sweeps — price briefly spikes past a liquidity level then reverses
+    if array.size(bslLines) > 0
+        for i = array.size(bslLines) - 1 to 0
+            if i < array.size(bslLines)
+                bslLevel = line.get_y1(array.get(bslLines, i))
+                // Sweep: wick above level but close below
+                if high > bslLevel and close < bslLevel
+                    if showLabels
+                        label.new(bar_index, high, "SWEEP ⚡", style=label.style_label_down, color=sweepColor, textcolor=color.white, size=labelSize)
+                    line.delete(array.get(bslLines, i))
+                    array.remove(bslLines, i)
+                    if i < array.size(bslLabels)
+                        label.delete(array.get(bslLabels, i))
+                        array.remove(bslLabels, i)
+
+    if array.size(sslLines) > 0
+        for i = array.size(sslLines) - 1 to 0
+            if i < array.size(sslLines)
+                sslLevel = line.get_y1(array.get(sslLines, i))
+                // Sweep: wick below level but close above
+                if low < sslLevel and close > sslLevel
+                    if showLabels
+                        label.new(bar_index, low, "SWEEP ⚡", style=label.style_label_up, color=sweepColor, textcolor=color.white, size=labelSize)
+                    line.delete(array.get(sslLines, i))
+                    array.remove(sslLines, i)
+                    if i < array.size(sslLabels)
+                        label.delete(array.get(sslLabels, i))
+                        array.remove(sslLabels, i)
+
+    // Limit lines/labels
+    while array.size(bslLines) > 20
+        line.delete(array.shift(bslLines))
+    while array.size(sslLines) > 20
+        line.delete(array.shift(sslLines))
+    while array.size(bslLabels) > 20
+        label.delete(array.shift(bslLabels))
+    while array.size(sslLabels) > 20
+        label.delete(array.shift(sslLabels))
+
+// ─────────────────────────────────────────────
+// ██  BACKGROUND: Premium / Discount Coloring
+// ─────────────────────────────────────────────
+
+rangeHighBG = ta.highest(high, premDiscLookback)
+rangeLowBG  = ta.lowest(low,   premDiscLookback)
+rangeMidBG  = (rangeHighBG + rangeLowBG) / 2.0
+
+inPremium  = showPremDisc and close > rangeMidBG + (rangeHighBG - rangeLowBG) * 0.25
+inDiscount = showPremDisc and close < rangeMidBG - (rangeHighBG - rangeLowBG) * 0.25
+
+bgcolor(inPremium  ? color.new(color.red,   95) : na, title="Premium BG")
+bgcolor(inDiscount ? color.new(color.green, 95) : na, title="Discount BG")
+
+// ─────────────────────────────────────────────
+// ██  INFO TABLE
+// ─────────────────────────────────────────────
+
+var table infoTable = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 80), border_width=1, border_color=color.new(color.gray, 60))
+
+if barstate.islast
+    zoneText = inPremium ? "PREMIUM ⚠️" : inDiscount ? "DISCOUNT 💰" : "EQUILIBRIUM ⚖️"
+    zoneCol  = inPremium ? color.red    : inDiscount ? color.green   : color.gray
+    trendText = trend == 1 ? "BULLISH ▲" : trend == -1 ? "BEARISH ▼" : "RANGING —"
+    trendCol  = trend == 1 ? color.teal  : trend == -1 ? color.red   : color.gray
+
+    table.cell(infoTable, 0, 0, "Zone",      text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, zoneText,     text_color=zoneCol,    text_size=size.small)
+    table.cell(infoTable, 0, 1, "Trend",      text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, trendText,    text_color=trendCol,   text_size=size.small)
+    table.cell(infoTable, 0, 2, "Swing High", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, str.tostring(lastSwingHigh, format.mintick), text_color=color.silver, text_size=size.small)
+    table.cell(infoTable, 0, 3, "Swing Low",  text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(lastSwingLow,  format.mintick), text_color=color.silver, text_size=size.small)
+    table.cell(infoTable, 0, 4, "Equilibrium",text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, str.tostring(rangeMidBG,    format.mintick), text_color=color.silver, text_size=size.small)
+
+// ─────────────────────────────────────────────
+// ██  ALERTS
+// ─────────────────────────────────────────────
+
+alertcondition(bosUp,     title="BOS Bullish",          message="Bullish Break of Structure detected")
+alertcondition(bosDown,   title="BOS Bearish",          message="Bearish Break of Structure detected")
+alertcondition(chochUp,   title="CHoCH Bullish",        message="Bullish Change of Character detected")
+alertcondition(chochDown, title="CHoCH Bearish",        message="Bearish Change of Character detected")
+alertcondition(inPremium, title="Price in Premium Zone", message="Price entered Premium Zone — potential distribution")
+alertcondition(inDiscount,title="Price in Discount Zone",message="Price entered Discount Zone — potential accumulation")
