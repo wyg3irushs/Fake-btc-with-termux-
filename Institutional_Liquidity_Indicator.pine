@@ -1,9 +1,9 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © wyg3irushs — Institutional Liquidity Premium v4 (Full SMC System)
+// © wyg3irushs — Institutional Liquidity Premium v4.1 (Full SMC System)
 
 //@version=5
-indicator("Institutional Liquidity Premium v4", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Institutional Liquidity Premium v4.1", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ═══════════════════════════════════════════════════════
 // ██  INPUTS
@@ -18,6 +18,17 @@ i_atrLen      = input.int(14,      "ATR Length",       minval=3,   maxval=50,  g
 i_atrMult     = input.float(1.5,   "ATR Mult (SL)",   minval=0.3, maxval=5.0, step=0.1, group="Signal Engine")
 i_cooldown    = input.int(10,      "Cooldown (bars)",  minval=0,   maxval=50,  group="Signal Engine")
 i_minAtrPct   = input.float(0.0,   "Min ATR %",       minval=0.0, maxval=2.0, step=0.1, group="Signal Engine")
+i_minScore    = input.int(70,      "Min Score %",     minval=0,   maxval=100, group="Signal Engine")
+i_minADX      = input.int(20,      "Min ADX",         minval=0,   maxval=50,  group="Signal Engine")
+i_useADX      = input.bool(true,   "ADX Filter",      group="Signal Engine")
+i_useVolKill  = input.bool(true,   "ATR Vol Kill",    group="Signal Engine")
+i_useCandle   = input.bool(false,  "Candle Confirm",  group="Signal Engine")
+
+// ── News Exclusion ──
+i_useNews     = input.bool(false,  "News Exclusion",         group="News Filter")
+i_newsTime1   = input.session("0830-0900", "Exclusion 1 (ET)",  group="News Filter")
+i_newsTime2   = input.session("1400-1430", "Exclusion 2 (ET)",  group="News Filter")
+i_newsTime3   = input.session("1000-1030", "Exclusion 3 (ET)",  group="News Filter")
 
 // ── TP Levels ──
 i_useTP0      = input.bool(false,  "TP0 (ultra-fast)", group="TP Levels")
@@ -115,6 +126,8 @@ bEv       = i_scalpMode ? true  : i_breakEven
 sBx       = i_scalpMode ? false : i_showBox
 sLb       = i_scalpMode ? false : i_showLabels
 lW        = i_scalpMode ? 1     : i_lineWidth
+minSc     = i_scalpMode ? 50    : i_minScore
+minADX    = i_scalpMode ? 15    : i_minADX
 r4        = i_rr4
 r5        = i_rr5
 trA       = i_trailATR
@@ -172,6 +185,20 @@ londonSess  = time(timeframe.period, "0200-1000:1234567", "America/New_York") !=
 nySess      = time(timeframe.period, "0800-1600:1234567", "America/New_York") != 0
 asiaSess    = time(timeframe.period, "1900-0200:1234567", "America/New_York") != 0
 inSession   = i_useSess == false or (i_sessLon and londonSess) or (i_sessNY and nySess) or (i_sessAsia and asiaSess)
+
+// ── News Exclusion ──
+newsExcl1 = time(timeframe.period, i_newsTime1, "America/New_York") != 0
+newsExcl2 = time(timeframe.period, i_newsTime2, "America/New_York") != 0
+newsExcl3 = time(timeframe.period, i_newsTime3, "America/New_York") != 0
+newsBlock = i_useNews and (newsExcl1 or newsExcl2 or newsExcl3)
+
+// ── Candlestick Confirmation ──
+bullEngulf = close > open and close > high[1] and open <= close[1]
+bearEngulf = close < open and close < low[1]  and open >= close[1]
+bullPin    = (high - low) > 0 ? (low - math.min(open, close)) / (high - low) > 0.6 and close > open : false
+bearPin    = (high - low) > 0 ? (math.max(open, close) - low) / (high - low) < 0.4 and close < open : false
+candleOkUp = i_useCandle == false or bullEngulf or bullPin
+candleOkDn = i_useCandle == false or bearEngulf or bearPin
 
 // ═══════════════════════════════════════════════════════
 // ██  SWING / STRUCTURE / CHoCH
@@ -451,6 +478,12 @@ finalScoreDn = math.min(scoreDn, 100.0)
 atrPct = atrVal / close * 100.0
 atrOk  = atrPct >= minAP
 
+// ADX filter
+trendOk    = i_useADX == false or adxVal >= minADX
+
+// ATR Volatility Kill Switch
+volKillOk  = i_useVolKill == false or atrVal > atrSma20 * 0.8
+
 // Base confluence
 emaOkUp = i_useEMA == false or close > emaVal
 emaOkDn = i_useEMA == false or close < emaVal
@@ -477,8 +510,8 @@ var int lastSigBar = 0
 coolOk = bar_index - lastSigBar > cdBars
 
 // Final signals
-buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and pdOkUp and liqOkUp and fvgOkUp and coolOk and inSession
-sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and pdOkDn and liqOkDn and fvgOkDn and coolOk and inSession
+buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and pdOkUp and liqOkUp and fvgOkUp and coolOk and inSession and trendOk and volKillOk and candleOkUp and not newsBlock and finalScoreUp >= minSc
+sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and pdOkDn and liqOkDn and fvgOkDn and coolOk and inSession and trendOk and volKillOk and candleOkDn and not newsBlock and finalScoreDn >= minSc
 
 if buyGo or sellGo
     lastSigBar := bar_index
@@ -872,7 +905,7 @@ plot(i_useHTF ? htfEma : na, "HTF EMA", color=color.new(color.orange, 50), linew
 // ██  DASHBOARD
 // ═══════════════════════════════════════════════════════
 
-var table dash = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 15), border_width=1, border_color=color.new(color.gray, 70))
+var table dash = table.new(position.bottom_right, 2, 12, bgcolor=color.new(color.black, 15), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast
     string tTxt  = trend == 1 ? "BULLISH" : trend == -1 ? "BEARISH" : "NEUTRAL"
@@ -914,8 +947,12 @@ if barstate.islast
     table.cell(dash, 1, 7, rgTxt,       text_color=rgCol,      text_size=size.small)
     table.cell(dash, 0, 8, "SCORE",     text_color=color.gray, text_size=size.tiny)
     table.cell(dash, 1, 8, str.tostring(topSc, "#") + "%", text_color=scCol, text_size=size.small)
-    table.cell(dash, 0, 9, "ACTIVE",    text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 9, str.tostring(aN), text_color=color.silver, text_size=size.small)
+    table.cell(dash, 0, 9, "ADX",       text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 9, str.tostring(adxVal, "#.0"), text_color=adxVal >= minADX ? i_buyCol : color.gray, text_size=size.small)
+    table.cell(dash, 0, 10, "RISK",     text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 10, str.tostring(atrPct, "#.2") + "%", text_color=atrPct > 0.5 ? i_buyCol : color.gray, text_size=size.small)
+    table.cell(dash, 0, 11, "ACTIVE",   text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 11, str.tostring(aN), text_color=color.silver, text_size=size.small)
 
 // ═══════════════════════════════════════════════════════
 // ██  ALERTS
