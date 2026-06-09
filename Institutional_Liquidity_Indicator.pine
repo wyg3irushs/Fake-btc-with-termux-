@@ -1,211 +1,590 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © wyg3irushs — Institutional Liquidity Premium Indicator v3 (Scalping Edition)
+// © wyg3irushs — Institutional Liquidity Premium v4 (Full SMC System)
 
 //@version=5
-indicator("Institutional Liquidity Premium v3", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Institutional Liquidity Premium v4", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // ██  INPUTS
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
-// Scalping Mode
-i_scalpMode   = input.bool(false, "Scalping Mode (auto-optimize)",  group="Scalping Mode")
+// ── Mode ──
+i_scalpMode   = input.bool(false,  "Scalping Mode",                group="Mode")
 
-// Signal Engine
-i_swingLen    = input.int(5,     "Swing Lookback",          minval=1,   maxval=50,  group="Signal Engine")
-i_atrLen      = input.int(14,    "ATR Length",              minval=3,   maxval=50,  group="Signal Engine")
-i_atrMult     = input.float(1.5, "ATR Multiplier (SL)",    minval=0.3, maxval=5.0, step=0.1, group="Signal Engine")
-i_cooldown    = input.int(10,    "Cooldown (bars)",         minval=0,   maxval=50,  group="Signal Engine")
-i_minAtrPct   = input.float(0.0, "Min ATR % (filter flat)", minval=0.0, maxval=2.0, step=0.1, group="Signal Engine")
+// ── Signal Engine ──
+i_swingLen    = input.int(5,       "Swing Lookback",   minval=1,   maxval=50,  group="Signal Engine")
+i_atrLen      = input.int(14,      "ATR Length",       minval=3,   maxval=50,  group="Signal Engine")
+i_atrMult     = input.float(1.5,   "ATR Mult (SL)",   minval=0.3, maxval=5.0, step=0.1, group="Signal Engine")
+i_cooldown    = input.int(10,      "Cooldown (bars)",  minval=0,   maxval=50,  group="Signal Engine")
+i_minAtrPct   = input.float(0.0,   "Min ATR %",       minval=0.0, maxval=2.0, step=0.1, group="Signal Engine")
 
-// TP Levels
-i_useTP0      = input.bool(false, "Enable TP0 (ultra-fast)", group="TP Levels")
-i_rr0         = input.float(0.4, "TP0 Risk:Reward",        minval=0.1, maxval=2.0, step=0.1, group="TP Levels")
-i_rr1         = input.float(1.0, "TP1 Risk:Reward",        minval=0.1, maxval=10,  step=0.1, group="TP Levels")
-i_rr2         = input.float(1.5, "TP2 Risk:Reward",        minval=0.1, maxval=10,  step=0.1, group="TP Levels")
-i_rr3         = input.float(2.0, "TP3 Risk:Reward",        minval=0.1, maxval=10,  step=0.1, group="TP Levels")
-i_rr4         = input.float(3.0, "TP4 Risk:Reward",        minval=0.1, maxval=10,  step=0.1, group="TP Levels")
-i_rr5         = input.float(4.0, "TP5 Risk:Reward",        minval=0.1, maxval=10,  step=0.1, group="TP Levels")
-i_showTP4     = input.bool(true,  "Show TP4",              group="TP Levels")
-i_showTP5     = input.bool(true,  "Show TP5",              group="TP Levels")
+// ── TP Levels ──
+i_useTP0      = input.bool(false,  "TP0 (ultra-fast)", group="TP Levels")
+i_rr0         = input.float(0.4,   "TP0 RR",          minval=0.1, maxval=2.0, step=0.1, group="TP Levels")
+i_rr1         = input.float(1.0,   "TP1 RR",          minval=0.1, maxval=10,  step=0.1, group="TP Levels")
+i_rr2         = input.float(1.5,   "TP2 RR",          minval=0.1, maxval=10,  step=0.1, group="TP Levels")
+i_rr3         = input.float(2.0,   "TP3 RR",          minval=0.1, maxval=10,  step=0.1, group="TP Levels")
+i_rr4         = input.float(3.0,   "TP4 RR",          minval=0.1, maxval=10,  step=0.1, group="TP Levels")
+i_rr5         = input.float(4.0,   "TP5 RR",          minval=0.1, maxval=10,  step=0.1, group="TP Levels")
+i_showTP4     = input.bool(true,   "Show TP4",        group="TP Levels")
+i_showTP5     = input.bool(true,   "Show TP5",        group="TP Levels")
+i_dynTP       = input.bool(false,  "Dynamic TP (liquidity levels)", group="TP Levels")
 
-// Trade Management
-i_trailSL     = input.bool(false, "Trailing Stop Loss",    group="Trade Management")
-i_trailATR    = input.float(1.0,  "Trail ATR Multiplier",  minval=0.3, maxval=3.0, step=0.1, group="Trade Management")
-i_breakEven   = input.bool(false, "Break-Even at TP1",     group="Trade Management")
+// ── Trade Management ──
+i_trailSL     = input.bool(false,  "Trailing SL",     group="Trade Mgmt")
+i_trailATR    = input.float(1.0,   "Trail ATR Mult",  minval=0.3, maxval=3.0, step=0.1, group="Trade Mgmt")
+i_breakEven   = input.bool(false,  "Break-Even at TP1",group="Trade Mgmt")
 
-// Confluence
-i_useEMA      = input.bool(true, "EMA Trend Filter",       group="Confluence")
-i_emaLen      = input.int(50,    "EMA Length",              minval=5,  maxval=200,  group="Confluence")
-i_useRSI      = input.bool(true, "RSI Filter",             group="Confluence")
-i_rsiLen      = input.int(14,    "RSI Length",              minval=3,  maxval=50,   group="Confluence")
-i_rsiOB       = input.float(70,  "RSI Overbought",         minval=50, maxval=95,   group="Confluence")
-i_rsiOS       = input.float(30,  "RSI Oversold",           minval=5,  maxval=50,   group="Confluence")
-i_useVol      = input.bool(true, "Volume Spike Filter",    group="Confluence")
-i_volMult     = input.float(1.5, "Volume Multiplier",      minval=1.0,maxval=5.0, step=0.1, group="Confluence")
-i_useHTF      = input.bool(false,"Higher TF EMA Filter",   group="Confluence")
-i_htfTF       = input.timeframe("60", "Higher TF",         group="Confluence")
-i_htfEmaLen   = input.int(20,    "Higher TF EMA Length",   minval=5,  maxval=200,  group="Confluence")
+// ── SMC Features ──
+i_showLiq     = input.bool(true,   "Liquidity Sweeps (BSL/SSL)", group="SMC Features")
+i_showEqHL    = input.bool(true,   "Equal Highs/Lows",          group="SMC Features")
+i_showFVG     = input.bool(true,   "Fair Value Gaps",            group="SMC Features")
+i_showOB      = input.bool(true,   "Order Blocks",               group="SMC Features")
+i_showMit     = input.bool(true,   "Mitigation Blocks",          group="SMC Features")
+i_showCHoCH   = input.bool(true,   "CHoCH Labels",               group="SMC Features")
+i_fvgRetest   = input.bool(true,   "FVG Retest Entry",           group="SMC Features")
+i_pdFilter    = input.bool(true,   "Premium/Discount Filter",    group="SMC Features")
+i_liqConfirm  = input.bool(true,   "Liquidity Grab Confirm",     group="SMC Features")
+i_eqTol       = input.float(0.1,   "Equal H/L Tolerance %", minval=0.01, maxval=1.0, step=0.01, group="SMC Features")
 
-// Design
-i_buyCol      = input.color(#00E676, "Buy Color",          group="Design")
-i_sellCol     = input.color(#FF1744, "Sell Color",          group="Design")
-i_slCol       = input.color(#FF5252, "Stop Loss Color",     group="Design")
-i_tpCol       = input.color(#69F0AE, "Take Profit Color",   group="Design")
-i_entCol      = input.color(#FFFFFF, "Entry Line Color",     group="Design")
-i_checkCol    = input.color(#00E676, "TP Hit Color",        group="Design")
-i_txtCol      = input.color(#FFFFFF, "Text Color",          group="Design")
-i_maxSetups   = input.int(5,     "Max Setups on Chart",     minval=1,  maxval=15,  group="Design")
-i_showBox     = input.bool(true, "Show Setup Box",          group="Design")
-i_showLabels  = input.bool(true, "Show Price Labels",       group="Design")
-i_lineWidth   = input.int(1,     "Line Width",              minval=1,  maxval=4,   group="Design")
+// ── Confluence ──
+i_useEMA      = input.bool(true,   "EMA Filter",      group="Confluence")
+i_emaLen      = input.int(50,      "EMA Length",       minval=5,  maxval=200, group="Confluence")
+i_useRSI      = input.bool(true,   "RSI Filter",      group="Confluence")
+i_rsiLen      = input.int(14,      "RSI Length",       minval=3,  maxval=50,  group="Confluence")
+i_rsiOB       = input.float(70,    "RSI OB",          minval=50, maxval=95,  group="Confluence")
+i_rsiOS       = input.float(30,    "RSI OS",          minval=5,  maxval=50,  group="Confluence")
+i_useVol      = input.bool(true,   "Volume Filter",   group="Confluence")
+i_volMult     = input.float(1.5,   "Vol Mult",        minval=1.0,maxval=5.0, step=0.1, group="Confluence")
 
-// Zones
-i_showPD      = input.bool(true, "Premium/Discount BG",    group="Zones")
-i_pdLen       = input.int(50,    "Range Lookback",          minval=10, maxval=200, group="Zones")
+// ── Multi-Timeframe ──
+i_useHTF      = input.bool(false,  "HTF Structure",   group="Multi-TF")
+i_htfTF       = input.timeframe("60", "Higher TF",    group="Multi-TF")
+i_htfEmaLen   = input.int(20,      "HTF EMA Len",     minval=5,  maxval=200, group="Multi-TF")
 
-// ─────────────────────────────────────────────────────
-// ██  SCALPING MODE OVERRIDES
-// ─────────────────────────────────────────────────────
+// ── Sessions ──
+i_useSess     = input.bool(false,  "Session Filter",  group="Sessions")
+i_sessLon     = input.bool(true,   "London",          group="Sessions")
+i_sessNY      = input.bool(true,   "New York",        group="Sessions")
+i_sessAsia    = input.bool(false,  "Asia",            group="Sessions")
+i_showSessBG  = input.bool(true,   "Session BG",      group="Sessions")
 
-swingLen  = i_scalpMode ? 2       : i_swingLen
-atrLen    = i_scalpMode ? 6       : i_atrLen
-atrMult   = i_scalpMode ? 1.0     : i_atrMult
-cooldown  = i_scalpMode ? 3       : i_cooldown
-minAtrPct = i_scalpMode ? 0.3     : i_minAtrPct
-useTP0    = i_scalpMode ? true    : i_useTP0
-rr0       = i_scalpMode ? 0.4     : i_rr0
-rr1       = i_scalpMode ? 0.75    : i_rr1
-rr2       = i_scalpMode ? 1.25    : i_rr2
-rr3       = i_scalpMode ? 2.0     : i_rr3
-showTP4   = i_scalpMode ? false   : i_showTP4
-showTP5   = i_scalpMode ? false   : i_showTP5
-emaLen    = i_scalpMode ? 20      : i_emaLen
-rsiLen    = i_scalpMode ? 6       : i_rsiLen
-rsiOB     = i_scalpMode ? 65.0    : i_rsiOB
-rsiOS     = i_scalpMode ? 35.0    : i_rsiOS
-volMult   = i_scalpMode ? 1.2     : i_volMult
-trailSL   = i_scalpMode ? true    : i_trailSL
-breakEven = i_scalpMode ? true    : i_breakEven
-showBox   = i_scalpMode ? false   : i_showBox
-showLbls  = i_scalpMode ? false   : i_showLabels
-lineW     = i_scalpMode ? 1       : i_lineWidth
+// ── Design ──
+i_buyCol      = input.color(#00E676, "Buy",           group="Design")
+i_sellCol     = input.color(#FF1744, "Sell",           group="Design")
+i_slCol       = input.color(#FF5252, "SL",             group="Design")
+i_tpCol       = input.color(#69F0AE, "TP",             group="Design")
+i_entCol      = input.color(#FFFFFF, "Entry",           group="Design")
+i_obCol       = input.color(#2196F3, "OB Color",       group="Design")
+i_fvgCol      = input.color(#AB47BC, "FVG Color",      group="Design")
+i_txtCol      = input.color(#FFFFFF, "Text",            group="Design")
+i_maxSetups   = input.int(5,        "Max Setups",      minval=1,  maxval=15,  group="Design")
+i_showBox     = input.bool(true,    "Setup Box",       group="Design")
+i_showLabels  = input.bool(true,    "Price Labels",    group="Design")
+i_lineWidth   = input.int(1,        "Line Width",      minval=1,  maxval=4,   group="Design")
 
-// Non-overridden
-rr4       = i_rr4
-rr5       = i_rr5
-trailATR  = i_trailATR
+// ── Zones ──
+i_showPD      = input.bool(true,   "Premium/Discount BG", group="Zones")
+i_showOTE     = input.bool(true,   "OTE Zone (62-79%)",   group="Zones")
+i_pdLen       = input.int(50,      "Range Lookback",   minval=10, maxval=200, group="Zones")
 
-// ─────────────────────────────────────────────────────
-// ██  GLOBAL CALCULATIONS (must run every bar)
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ██  SCALPING OVERRIDES
+// ═══════════════════════════════════════════════════════
 
-atrVal   = ta.atr(atrLen)
-emaVal   = ta.ema(close, emaLen)
-rsiVal   = ta.rsi(close, rsiLen)
+swLen     = i_scalpMode ? 2     : i_swingLen
+atLen     = i_scalpMode ? 6     : i_atrLen
+atMult    = i_scalpMode ? 1.0   : i_atrMult
+cdBars    = i_scalpMode ? 3     : i_cooldown
+minAP     = i_scalpMode ? 0.3   : i_minAtrPct
+tp0On     = i_scalpMode ? true  : i_useTP0
+r0        = i_scalpMode ? 0.4   : i_rr0
+r1        = i_scalpMode ? 0.75  : i_rr1
+r2        = i_scalpMode ? 1.25  : i_rr2
+r3        = i_scalpMode ? 2.0   : i_rr3
+tp4On     = i_scalpMode ? false : i_showTP4
+tp5On     = i_scalpMode ? false : i_showTP5
+emL       = i_scalpMode ? 20    : i_emaLen
+rsL       = i_scalpMode ? 6     : i_rsiLen
+rsOB      = i_scalpMode ? 65.0  : i_rsiOB
+rsOS      = i_scalpMode ? 35.0  : i_rsiOS
+vlM       = i_scalpMode ? 1.2   : i_volMult
+tSL       = i_scalpMode ? true  : i_trailSL
+bEv       = i_scalpMode ? true  : i_breakEven
+sBx       = i_scalpMode ? false : i_showBox
+sLb       = i_scalpMode ? false : i_showLabels
+lW        = i_scalpMode ? 1     : i_lineWidth
+r4        = i_rr4
+r5        = i_rr5
+trA       = i_trailATR
+
+// ═══════════════════════════════════════════════════════
+// ██  GLOBAL CALCULATIONS
+// ═══════════════════════════════════════════════════════
+
+atrVal   = ta.atr(atLen)
+emaVal   = ta.ema(close, emL)
+rsiVal   = ta.rsi(close, rsL)
 avgVol   = ta.sma(volume, 20)
 rangeH   = ta.highest(high, i_pdLen)
 rangeL   = ta.lowest(low,   i_pdLen)
 rangeMid = (rangeH + rangeL) / 2.0
 rangeQ   = (rangeH - rangeL) * 0.25
 
-// Higher TF EMA (runs every bar regardless of toggle)
-htfEma   = request.security(syminfo.tickerid, i_htfTF, ta.ema(close, i_htfEmaLen), lookahead=barmerge.lookahead_off)
+// HTF data
+htfEma    = request.security(syminfo.tickerid, i_htfTF, ta.ema(close, i_htfEmaLen), lookahead=barmerge.lookahead_off)
+htfClose  = request.security(syminfo.tickerid, i_htfTF, close, lookahead=barmerge.lookahead_off)
 
-// Swing detection
-pivHi = ta.pivothigh(high, swingLen, swingLen)
-pivLo = ta.pivotlow(low,   swingLen, swingLen)
+// ── Premium / Discount / OTE ──
+bool inPrem = close > rangeMid + rangeQ
+bool inDisc = close < rangeMid - rangeQ
+float oteHi = rangeMid + (rangeH - rangeL) * 0.29
+float oteLo = rangeMid + (rangeH - rangeL) * 0.12
+bool  inOTE = close >= oteLo and close <= oteHi
 
-var float lastSH = na
+// ── Volume Institutional ──
+relVol    = avgVol > 0 ? volume / avgVol : 0.0
+volDelta  = close > open ? volume : -volume
+climaxVol = relVol > 3.0
+highVol   = relVol > vlM
+
+// ── Market Regime ──
+atrSma20  = ta.sma(atrVal, 20)
+atrSma50  = ta.sma(atrVal, 50)
+adxLen    = 14
+dPlus     = ta.change(high)
+dMinus    = -ta.change(low)
+trSmooth  = ta.rma(ta.tr, adxLen)
+dpSmooth  = ta.rma(math.max(dPlus, 0), adxLen)
+dmSmooth  = ta.rma(math.max(dMinus, 0), adxLen)
+diPlus    = trSmooth > 0 ? dpSmooth / trSmooth * 100 : 0
+diMinus   = trSmooth > 0 ? dmSmooth / trSmooth * 100 : 0
+dxVal     = (diPlus + diMinus) > 0 ? math.abs(diPlus - diMinus) / (diPlus + diMinus) * 100 : 0
+adxVal    = ta.rma(dxVal, adxLen)
+
+regime_trend  = adxVal > 25
+regime_range  = adxVal < 20
+regime_vol    = atrSma20 > atrSma50 * 1.3
+
+// ── Sessions ──
+londonSess  = time(timeframe.period, "0200-1000:1234567", "America/New_York") != 0
+nySess      = time(timeframe.period, "0800-1600:1234567", "America/New_York") != 0
+asiaSess    = time(timeframe.period, "1900-0200:1234567", "America/New_York") != 0
+inSession   = i_useSess == false or (i_sessLon and londonSess) or (i_sessNY and nySess) or (i_sessAsia and asiaSess)
+
+// ═══════════════════════════════════════════════════════
+// ██  SWING / STRUCTURE / CHoCH
+// ═══════════════════════════════════════════════════════
+
+pivHi = ta.pivothigh(high, swLen, swLen)
+pivLo = ta.pivotlow(low,   swLen, swLen)
+
+var float lastSH  = na
 var float lastSL_ = na
-var int   trend  = 0
+var float prevSH  = na
+var float prevSL  = na
+var int   trend   = 0
 
 if not na(pivHi)
-    lastSH := pivHi
+    prevSH  := lastSH
+    lastSH  := pivHi
 if not na(pivLo)
+    prevSL  := lastSL_
     lastSL_ := pivLo
 
-// Structure breaks
+// BOS
 bosUp   = not na(lastSH)  and ta.crossover(close, lastSH)
 bosDown = not na(lastSL_) and ta.crossunder(close, lastSL_)
+
+// CHoCH: break in opposite direction to current trend
+chochUp   = trend == -1 and bosUp
+chochDown = trend ==  1 and bosDown
 
 if bosUp
     trend := 1
 if bosDown
     trend := -1
 
-// Min ATR filter (avoid flat markets)
+// ═══════════════════════════════════════════════════════
+// ██  EQUAL HIGHS / LOWS
+// ═══════════════════════════════════════════════════════
+
+var float eqHi = na
+var float eqLo = na
+var int   eqHiBar = na
+var int   eqLoBar = na
+
+eqTol = close * i_eqTol / 100.0
+
+if not na(pivHi) and not na(prevSH)
+    if math.abs(pivHi - prevSH) < eqTol
+        eqHi    := pivHi
+        eqHiBar := bar_index - swLen
+
+if not na(pivLo) and not na(prevSL)
+    if math.abs(pivLo - prevSL) < eqTol
+        eqLo    := pivLo
+        eqLoBar := bar_index - swLen
+
+// ═══════════════════════════════════════════════════════
+// ██  LIQUIDITY SWEEPS
+// ═══════════════════════════════════════════════════════
+
+var bool bslSwept = false
+var bool sslSwept = false
+
+bslSweep = not na(eqHi) and high > eqHi and close < eqHi
+sslSweep = not na(eqLo) and low  < eqLo and close > eqLo
+
+if bslSweep
+    bslSwept := true
+if sslSweep
+    sslSwept := true
+if bosUp
+    sslSwept := false
+if bosDown
+    bslSwept := false
+
+// ═══════════════════════════════════════════════════════
+// ██  FVG DETECTION
+// ═══════════════════════════════════════════════════════
+
+var array<float> fvgTop  = array.new_float()
+var array<float> fvgBot  = array.new_float()
+var array<int>   fvgBar  = array.new_int()
+var array<int>   fvgDir  = array.new_int()
+var array<box>   fvgBox  = array.new_box()
+var array<bool>  fvgMit  = array.new_bool()
+
+bullFVG = low > high[2] and close[1] > open[1]
+bearFVG = high < low[2] and close[1] < open[1]
+
+if i_showFVG and bullFVG
+    float fTop = low
+    float fBot = high[2]
+    if fTop > fBot
+        array.push(fvgTop, fTop)
+        array.push(fvgBot, fBot)
+        array.push(fvgBar, bar_index - 1)
+        array.push(fvgDir, 1)
+        array.push(fvgMit, false)
+        array.push(fvgBox, box.new(bar_index - 2, fTop, bar_index, fBot, border_color=color.new(i_buyCol, 60), bgcolor=color.new(i_buyCol, 90), border_width=1))
+
+if i_showFVG and bearFVG
+    float fTop2 = low[2]
+    float fBot2 = high
+    if fTop2 > fBot2
+        array.push(fvgTop, fTop2)
+        array.push(fvgBot, fBot2)
+        array.push(fvgBar, bar_index - 1)
+        array.push(fvgDir, -1)
+        array.push(fvgMit, false)
+        array.push(fvgBox, box.new(bar_index - 2, fTop2, bar_index, fBot2, border_color=color.new(i_sellCol, 60), bgcolor=color.new(i_sellCol, 90), border_width=1))
+
+// FVG mitigation check
+var bool fvgRetestBull = false
+var bool fvgRetestBear = false
+
+if array.size(fvgTop) > 0
+    for ix = array.size(fvgTop) - 1 to 0
+        if not array.get(fvgMit, ix)
+            int fd = array.get(fvgDir, ix)
+            if fd == 1 and low <= array.get(fvgTop, ix)
+                array.set(fvgMit, ix, true)
+                box.set_bgcolor(array.get(fvgBox, ix), color.new(color.gray, 95))
+                box.set_border_color(array.get(fvgBox, ix), color.new(color.gray, 80))
+                if close > array.get(fvgBot, ix)
+                    fvgRetestBull := true
+            if fd == -1 and high >= array.get(fvgBot, ix)
+                array.set(fvgMit, ix, true)
+                box.set_bgcolor(array.get(fvgBox, ix), color.new(color.gray, 95))
+                box.set_border_color(array.get(fvgBox, ix), color.new(color.gray, 80))
+                if close < array.get(fvgTop, ix)
+                    fvgRetestBear := true
+
+// Trim old FVGs
+while array.size(fvgTop) > 50
+    array.shift(fvgTop)
+    array.shift(fvgBot)
+    array.shift(fvgBar)
+    array.shift(fvgDir)
+    array.shift(fvgMit)
+    box.delete(array.shift(fvgBox))
+
+// ═══════════════════════════════════════════════════════
+// ██  ORDER BLOCKS
+// ═══════════════════════════════════════════════════════
+
+var array<float> obTop   = array.new_float()
+var array<float> obBot   = array.new_float()
+var array<int>   obBar   = array.new_int()
+var array<int>   obDir   = array.new_int()
+var array<box>   obBox   = array.new_box()
+var array<bool>  obMit   = array.new_bool()
+
+bullOB = bosUp and close[1] < open[1]
+bearOB = bosDown and close[1] > open[1]
+
+if i_showOB and bullOB
+    float oT = math.max(open[1], close[1])
+    float oB = math.min(open[1], close[1])
+    array.push(obTop, oT)
+    array.push(obBot, oB)
+    array.push(obBar, bar_index - 1)
+    array.push(obDir, 1)
+    array.push(obMit, false)
+    array.push(obBox, box.new(bar_index - 1, oT, bar_index + 20, oB, border_color=color.new(i_obCol, 40), bgcolor=color.new(i_obCol, 88), border_width=1))
+
+if i_showOB and bearOB
+    float oT2 = math.max(open[1], close[1])
+    float oB2 = math.min(open[1], close[1])
+    array.push(obTop, oT2)
+    array.push(obBot, oB2)
+    array.push(obBar, bar_index - 1)
+    array.push(obDir, -1)
+    array.push(obMit, false)
+    array.push(obBox, box.new(bar_index - 1, oT2, bar_index + 20, oB2, border_color=color.new(i_sellCol, 40), bgcolor=color.new(i_sellCol, 88), border_width=1))
+
+// OB mitigation + extend
+if array.size(obTop) > 0
+    for jx = array.size(obTop) - 1 to 0
+        if not array.get(obMit, jx)
+            box.set_right(array.get(obBox, jx), bar_index + 5)
+            int od = array.get(obDir, jx)
+            if od == 1 and low <= array.get(obBot, jx)
+                array.set(obMit, jx, true)
+                if i_showMit
+                    box.set_bgcolor(array.get(obBox, jx), color.new(color.gray, 93))
+                    box.set_border_color(array.get(obBox, jx), color.new(color.gray, 70))
+            if od == -1 and high >= array.get(obTop, jx)
+                array.set(obMit, jx, true)
+                if i_showMit
+                    box.set_bgcolor(array.get(obBox, jx), color.new(color.gray, 93))
+                    box.set_border_color(array.get(obBox, jx), color.new(color.gray, 70))
+
+// Trim old OBs
+while array.size(obTop) > 30
+    array.shift(obTop)
+    array.shift(obBot)
+    array.shift(obBar)
+    array.shift(obDir)
+    array.shift(obMit)
+    box.delete(array.shift(obBox))
+
+// ═══════════════════════════════════════════════════════
+// ██  INSTITUTIONAL SCORE ENGINE
+// ═══════════════════════════════════════════════════════
+
+scoreUp = 0.0
+scoreDn = 0.0
+
+// EMA trend (+20)
+if close > emaVal
+    scoreUp += 20.0
+if close < emaVal
+    scoreDn += 20.0
+
+// Volume (+15)
+if highVol
+    scoreUp += 15.0
+    scoreDn += 15.0
+
+// FVG present (+20)
+if fvgRetestBull
+    scoreUp += 20.0
+if fvgRetestBear
+    scoreDn += 20.0
+
+// OB nearby (+20)
+obNearBull = false
+obNearBear = false
+if array.size(obTop) > 0
+    for kx = math.max(array.size(obTop) - 5, 0) to array.size(obTop) - 1
+        if not array.get(obMit, kx)
+            if array.get(obDir, kx) == 1 and low <= array.get(obTop, kx) and close >= array.get(obBot, kx)
+                obNearBull := true
+            if array.get(obDir, kx) == -1 and high >= array.get(obBot, kx) and close <= array.get(obTop, kx)
+                obNearBear := true
+
+if obNearBull
+    scoreUp += 20.0
+if obNearBear
+    scoreDn += 20.0
+
+// Liquidity sweep (+25)
+if sslSwept
+    scoreUp += 25.0
+if bslSwept
+    scoreDn += 25.0
+
+// Premium/Discount zone bonus
+if inDisc
+    scoreUp += 10.0
+if inPrem
+    scoreDn += 10.0
+
+// RSI bonus
+if rsiVal < rsOS + 10
+    scoreUp += 5.0
+if rsiVal > rsOB - 10
+    scoreDn += 5.0
+
+// HTF alignment
+if i_useHTF and htfClose > htfEma
+    scoreUp += 10.0
+if i_useHTF and htfClose < htfEma
+    scoreDn += 10.0
+
+// Session bonus
+if londonSess or nySess
+    scoreUp += 5.0
+    scoreDn += 5.0
+
+finalScoreUp = math.min(scoreUp, 100.0)
+finalScoreDn = math.min(scoreDn, 100.0)
+
+// ═══════════════════════════════════════════════════════
+// ██  SIGNAL GENERATION
+// ═══════════════════════════════════════════════════════
+
 atrPct = atrVal / close * 100.0
-atrOk  = atrPct >= minAtrPct
+atrOk  = atrPct >= minAP
 
-// Confluence
-emaOkUp   = i_useEMA == false or close > emaVal
-emaOkDn   = i_useEMA == false or close < emaVal
-rsiOkUp   = i_useRSI == false or rsiVal < rsiOB
-rsiOkDn   = i_useRSI == false or rsiVal > rsiOS
-volOk     = i_useVol  == false or volume > avgVol * volMult
-htfOkUp   = i_useHTF  == false or close > htfEma
-htfOkDn   = i_useHTF  == false or close < htfEma
+// Base confluence
+emaOkUp = i_useEMA == false or close > emaVal
+emaOkDn = i_useEMA == false or close < emaVal
+rsiOkUp = i_useRSI == false or rsiVal < rsOB
+rsiOkDn = i_useRSI == false or rsiVal > rsOS
+volOk   = i_useVol == false or highVol
+htfOkUp = i_useHTF == false or htfClose > htfEma
+htfOkDn = i_useHTF == false or htfClose < htfEma
 
-// Signals with cooldown
+// Premium/Discount filter
+pdOkUp = i_pdFilter == false or inDisc or (not inPrem)
+pdOkDn = i_pdFilter == false or inPrem or (not inDisc)
+
+// Liquidity grab confirmation
+liqOkUp = i_liqConfirm == false or sslSwept
+liqOkDn = i_liqConfirm == false or bslSwept
+
+// FVG retest confirmation
+fvgOkUp = i_fvgRetest == false or fvgRetestBull or bullFVG
+fvgOkDn = i_fvgRetest == false or fvgRetestBear or bearFVG
+
+// Cooldown
 var int lastSigBar = 0
-coolOk = bar_index - lastSigBar > cooldown
+coolOk = bar_index - lastSigBar > cdBars
 
-buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and coolOk
-sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and coolOk
+// Final signals
+buyGo  = bosUp   and emaOkUp and rsiOkUp and volOk and htfOkUp and atrOk and pdOkUp and liqOkUp and fvgOkUp and coolOk and inSession
+sellGo = bosDown and emaOkDn and rsiOkDn and volOk and htfOkDn and atrOk and pdOkDn and liqOkDn and fvgOkDn and coolOk and inSession
 
 if buyGo or sellGo
     lastSigBar := bar_index
 
-// ─────────────────────────────────────────────────────
-// ██  TRADE SETUP STORAGE (parallel arrays)
-// ─────────────────────────────────────────────────────
+// Reset FVG retest flags each bar
+fvgRetestBull := false
+fvgRetestBear := false
 
-var array<int>   s_bar     = array.new_int()
-var array<int>   s_dir     = array.new_int()
-var array<float> s_entry   = array.new_float()
-var array<float> s_sl      = array.new_float()
-var array<float> s_tp0     = array.new_float()
-var array<float> s_tp1     = array.new_float()
-var array<float> s_tp2     = array.new_float()
-var array<float> s_tp3     = array.new_float()
-var array<float> s_tp4     = array.new_float()
-var array<float> s_tp5     = array.new_float()
-var array<bool>  s_tp0Hit  = array.new_bool()
-var array<bool>  s_tp1Hit  = array.new_bool()
-var array<bool>  s_tp2Hit  = array.new_bool()
-var array<bool>  s_tp3Hit  = array.new_bool()
-var array<bool>  s_tp4Hit  = array.new_bool()
-var array<bool>  s_tp5Hit  = array.new_bool()
-var array<bool>  s_slHit   = array.new_bool()
-var array<bool>  s_closed  = array.new_bool()
-var array<bool>  s_beSet   = array.new_bool()   // break-even activated
+// ═══════════════════════════════════════════════════════
+// ██  SMC LABELS (BOS / CHoCH / Sweeps / EQ)
+// ═══════════════════════════════════════════════════════
+
+// BOS labels
+if bosUp and not chochUp
+    label.new(bar_index, high + atrVal * 0.2, "BOS", style=label.style_label_down, color=color.new(i_buyCol, 50), textcolor=i_txtCol, size=size.tiny)
+if bosDown and not chochDown
+    label.new(bar_index, low - atrVal * 0.2, "BOS", style=label.style_label_up, color=color.new(i_sellCol, 50), textcolor=i_txtCol, size=size.tiny)
+
+// CHoCH labels
+if i_showCHoCH and chochUp
+    label.new(bar_index, high + atrVal * 0.3, "CHoCH", style=label.style_label_down, color=color.new(#FFC107, 30), textcolor=color.black, size=size.small)
+if i_showCHoCH and chochDown
+    label.new(bar_index, low - atrVal * 0.3, "CHoCH", style=label.style_label_up, color=color.new(#FFC107, 30), textcolor=color.black, size=size.small)
+
+// Liquidity sweep labels
+if i_showLiq and bslSweep
+    label.new(bar_index, high + atrVal * 0.15, "BSL Swept", style=label.style_label_down, color=color.new(i_sellCol, 40), textcolor=i_txtCol, size=size.tiny)
+if i_showLiq and sslSweep
+    label.new(bar_index, low - atrVal * 0.15, "SSL Swept", style=label.style_label_up, color=color.new(i_buyCol, 40), textcolor=i_txtCol, size=size.tiny)
+
+// Equal highs/lows lines
+if i_showEqHL and not na(eqHi) and not na(eqHiBar) and bar_index == eqHiBar
+    line.new(eqHiBar - 10, eqHi, eqHiBar + 20, eqHi, color=color.new(i_sellCol, 50), style=line.style_dotted, width=1)
+    label.new(eqHiBar, eqHi + atrVal * 0.1, "EQH", style=label.style_none, textcolor=color.new(i_sellCol, 30), size=size.tiny)
+if i_showEqHL and not na(eqLo) and not na(eqLoBar) and bar_index == eqLoBar
+    line.new(eqLoBar - 10, eqLo, eqLoBar + 20, eqLo, color=color.new(i_buyCol, 50), style=line.style_dotted, width=1)
+    label.new(eqLoBar, eqLo - atrVal * 0.1, "EQL", style=label.style_none, textcolor=color.new(i_buyCol, 30), size=size.tiny)
+
+// ═══════════════════════════════════════════════════════
+// ██  DYNAMIC LIQUIDITY TARGETS
+// ═══════════════════════════════════════════════════════
+
+var float dynTP1 = na
+var float dynTP2 = na
+var float dynTP3 = na
+
+if i_dynTP
+    if buyGo
+        dynTP1 := not na(lastSH) ? lastSH : na
+        dynTP2 := not na(eqHi)   ? eqHi   : na
+        dynTP3 := rangeH
+    if sellGo
+        dynTP1 := not na(lastSL_) ? lastSL_ : na
+        dynTP2 := not na(eqLo)    ? eqLo    : na
+        dynTP3 := rangeL
+
+// ═══════════════════════════════════════════════════════
+// ██  TRADE SETUP STORAGE
+// ═══════════════════════════════════════════════════════
+
+var array<int>   s_bar    = array.new_int()
+var array<int>   s_dir    = array.new_int()
+var array<float> s_entry  = array.new_float()
+var array<float> s_sl     = array.new_float()
+var array<float> s_tp0    = array.new_float()
+var array<float> s_tp1    = array.new_float()
+var array<float> s_tp2    = array.new_float()
+var array<float> s_tp3    = array.new_float()
+var array<float> s_tp4    = array.new_float()
+var array<float> s_tp5    = array.new_float()
+var array<bool>  s_tp0H   = array.new_bool()
+var array<bool>  s_tp1H   = array.new_bool()
+var array<bool>  s_tp2H   = array.new_bool()
+var array<bool>  s_tp3H   = array.new_bool()
+var array<bool>  s_tp4H   = array.new_bool()
+var array<bool>  s_tp5H   = array.new_bool()
+var array<bool>  s_slH    = array.new_bool()
+var array<bool>  s_cls    = array.new_bool()
+var array<bool>  s_be     = array.new_bool()
+var array<float> s_score  = array.new_float()
 
 // Drawing arrays
-var array<box>   d_box     = array.new_box()
-var array<line>  d_entry   = array.new_line()
-var array<line>  d_sl      = array.new_line()
-var array<line>  d_tp0     = array.new_line()
-var array<line>  d_tp1     = array.new_line()
-var array<line>  d_tp2     = array.new_line()
-var array<line>  d_tp3     = array.new_line()
-var array<line>  d_tp4     = array.new_line()
-var array<line>  d_tp5     = array.new_line()
-var array<label> d_entLbl  = array.new_label()
-var array<label> d_slLbl   = array.new_label()
-var array<label> d_tp0Lbl  = array.new_label()
-var array<label> d_tp1Lbl  = array.new_label()
-var array<label> d_tp2Lbl  = array.new_label()
-var array<label> d_tp3Lbl  = array.new_label()
-var array<label> d_tp4Lbl  = array.new_label()
-var array<label> d_tp5Lbl  = array.new_label()
-var array<label> d_sigLbl  = array.new_label()
-var array<label> d_resLbl  = array.new_label()
+var array<box>   d_box    = array.new_box()
+var array<line>  d_ent    = array.new_line()
+var array<line>  d_sl     = array.new_line()
+var array<line>  d_t0     = array.new_line()
+var array<line>  d_t1     = array.new_line()
+var array<line>  d_t2     = array.new_line()
+var array<line>  d_t3     = array.new_line()
+var array<line>  d_t4     = array.new_line()
+var array<line>  d_t5     = array.new_line()
+var array<label> d_eLbl   = array.new_label()
+var array<label> d_sLbl   = array.new_label()
+var array<label> d_t0L    = array.new_label()
+var array<label> d_t1L    = array.new_label()
+var array<label> d_t2L    = array.new_label()
+var array<label> d_t3L    = array.new_label()
+var array<label> d_t4L    = array.new_label()
+var array<label> d_t5L    = array.new_label()
+var array<label> d_sig    = array.new_label()
+var array<label> d_res    = array.new_label()
+var array<label> d_scr    = array.new_label()
 
-// ─────────────────────────────────────────────────────
-// ██  HELPER: delete oldest setup
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ██  HELPER
+// ═══════════════════════════════════════════════════════
 
 removeOldest() =>
     if array.size(s_bar) > 0
@@ -219,55 +598,59 @@ removeOldest() =>
         array.shift(s_tp3)
         array.shift(s_tp4)
         array.shift(s_tp5)
-        array.shift(s_tp0Hit)
-        array.shift(s_tp1Hit)
-        array.shift(s_tp2Hit)
-        array.shift(s_tp3Hit)
-        array.shift(s_tp4Hit)
-        array.shift(s_tp5Hit)
-        array.shift(s_slHit)
-        array.shift(s_closed)
-        array.shift(s_beSet)
+        array.shift(s_tp0H)
+        array.shift(s_tp1H)
+        array.shift(s_tp2H)
+        array.shift(s_tp3H)
+        array.shift(s_tp4H)
+        array.shift(s_tp5H)
+        array.shift(s_slH)
+        array.shift(s_cls)
+        array.shift(s_be)
+        array.shift(s_score)
         box.delete(array.shift(d_box))
-        line.delete(array.shift(d_entry))
+        line.delete(array.shift(d_ent))
         line.delete(array.shift(d_sl))
-        line.delete(array.shift(d_tp0))
-        line.delete(array.shift(d_tp1))
-        line.delete(array.shift(d_tp2))
-        line.delete(array.shift(d_tp3))
-        line.delete(array.shift(d_tp4))
-        line.delete(array.shift(d_tp5))
-        label.delete(array.shift(d_entLbl))
-        label.delete(array.shift(d_slLbl))
-        label.delete(array.shift(d_tp0Lbl))
-        label.delete(array.shift(d_tp1Lbl))
-        label.delete(array.shift(d_tp2Lbl))
-        label.delete(array.shift(d_tp3Lbl))
-        label.delete(array.shift(d_tp4Lbl))
-        label.delete(array.shift(d_tp5Lbl))
-        label.delete(array.shift(d_sigLbl))
-        label.delete(array.shift(d_resLbl))
+        line.delete(array.shift(d_t0))
+        line.delete(array.shift(d_t1))
+        line.delete(array.shift(d_t2))
+        line.delete(array.shift(d_t3))
+        line.delete(array.shift(d_t4))
+        line.delete(array.shift(d_t5))
+        label.delete(array.shift(d_eLbl))
+        label.delete(array.shift(d_sLbl))
+        label.delete(array.shift(d_t0L))
+        label.delete(array.shift(d_t1L))
+        label.delete(array.shift(d_t2L))
+        label.delete(array.shift(d_t3L))
+        label.delete(array.shift(d_t4L))
+        label.delete(array.shift(d_t5L))
+        label.delete(array.shift(d_sig))
+        label.delete(array.shift(d_res))
+        label.delete(array.shift(d_scr))
     true
 
-// ─────────────────────────────────────────────────────
-// ██  CREATE NEW SETUP
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ██  CREATE SETUP
+// ═══════════════════════════════════════════════════════
 
-createNewSetup(int dir) =>
-    float ep     = close
-    float slDist = atrVal * atrMult
-    float slP    = dir == 1 ? ep - slDist : ep + slDist
-    float risk   = math.abs(ep - slP)
-    float t0     = dir == 1 ? ep + risk * rr0 : ep - risk * rr0
-    float t1     = dir == 1 ? ep + risk * rr1 : ep - risk * rr1
-    float t2     = dir == 1 ? ep + risk * rr2 : ep - risk * rr2
-    float t3     = dir == 1 ? ep + risk * rr3 : ep - risk * rr3
-    float t4     = dir == 1 ? ep + risk * rr4 : ep - risk * rr4
-    float t5     = dir == 1 ? ep + risk * rr5 : ep - risk * rr5
-    int   rEdge  = bar_index + 30
-    color mCol   = dir == 1 ? i_buyCol : i_sellCol
+createSetup(int dir) =>
+    float ep   = close
+    float slD  = atrVal * atMult
+    float slP  = dir == 1 ? ep - slD : ep + slD
+    float risk = math.abs(ep - slP)
 
-    // Store data
+    // TP calculation (dynamic or fixed)
+    float t0 = dir == 1 ? ep + risk * r0 : ep - risk * r0
+    float t1 = i_dynTP and not na(dynTP1) ? dynTP1 : (dir == 1 ? ep + risk * r1 : ep - risk * r1)
+    float t2 = i_dynTP and not na(dynTP2) ? dynTP2 : (dir == 1 ? ep + risk * r2 : ep - risk * r2)
+    float t3 = i_dynTP and not na(dynTP3) ? dynTP3 : (dir == 1 ? ep + risk * r3 : ep - risk * r3)
+    float t4 = dir == 1 ? ep + risk * r4 : ep - risk * r4
+    float t5 = dir == 1 ? ep + risk * r5 : ep - risk * r5
+    int   rE = bar_index + 30
+    color mC = dir == 1 ? i_buyCol : i_sellCol
+    float sc = dir == 1 ? finalScoreUp : finalScoreDn
+
     array.push(s_bar, bar_index)
     array.push(s_dir, dir)
     array.push(s_entry, ep)
@@ -278,264 +661,269 @@ createNewSetup(int dir) =>
     array.push(s_tp3, t3)
     array.push(s_tp4, t4)
     array.push(s_tp5, t5)
-    array.push(s_tp0Hit, false)
-    array.push(s_tp1Hit, false)
-    array.push(s_tp2Hit, false)
-    array.push(s_tp3Hit, false)
-    array.push(s_tp4Hit, false)
-    array.push(s_tp5Hit, false)
-    array.push(s_slHit, false)
-    array.push(s_closed, false)
-    array.push(s_beSet, false)
+    array.push(s_tp0H, false)
+    array.push(s_tp1H, false)
+    array.push(s_tp2H, false)
+    array.push(s_tp3H, false)
+    array.push(s_tp4H, false)
+    array.push(s_tp5H, false)
+    array.push(s_slH, false)
+    array.push(s_cls, false)
+    array.push(s_be, false)
+    array.push(s_score, sc)
 
-    // Draw setup box (entry to TP1)
-    float bxTop = dir == 1 ? t1 : ep
-    float bxBot = dir == 1 ? ep : t1
-    array.push(d_box, showBox ? box.new(bar_index, bxTop, rEdge, bxBot, border_color=mCol, bgcolor=color.new(mCol, 88), border_width=1) : box.new(bar_index, ep, rEdge, ep, border_color=na, bgcolor=na))
+    // Box
+    float bT = dir == 1 ? t1 : ep
+    float bB = dir == 1 ? ep : t1
+    array.push(d_box, sBx ? box.new(bar_index, bT, rE, bB, border_color=mC, bgcolor=color.new(mC, 88), border_width=1) : box.new(bar_index, ep, rE, ep, border_color=na, bgcolor=na))
 
-    // Draw lines
-    array.push(d_entry, line.new(bar_index, ep,  rEdge, ep,  color=i_entCol, style=line.style_solid,  width=lineW + 1))
-    array.push(d_sl,    line.new(bar_index, slP, rEdge, slP, color=i_slCol,  style=line.style_dashed, width=lineW + 1))
-    array.push(d_tp0,   useTP0 ? line.new(bar_index, t0,  rEdge, t0,  color=color.new(i_tpCol, 30), style=line.style_dotted, width=lineW) : line.new(bar_index, ep, rEdge, ep, color=na))
-    array.push(d_tp1,   line.new(bar_index, t1,  rEdge, t1,  color=i_tpCol,  style=line.style_dotted, width=lineW))
-    array.push(d_tp2,   line.new(bar_index, t2,  rEdge, t2,  color=i_tpCol,  style=line.style_dotted, width=lineW))
-    array.push(d_tp3,   line.new(bar_index, t3,  rEdge, t3,  color=i_tpCol,  style=line.style_dotted, width=lineW))
-    array.push(d_tp4,   showTP4 ? line.new(bar_index, t4, rEdge, t4, color=i_tpCol, style=line.style_dotted, width=lineW) : line.new(bar_index, ep, rEdge, ep, color=na))
-    array.push(d_tp5,   showTP5 ? line.new(bar_index, t5, rEdge, t5, color=i_tpCol, style=line.style_dotted, width=lineW) : line.new(bar_index, ep, rEdge, ep, color=na))
+    // Lines
+    array.push(d_ent, line.new(bar_index, ep, rE, ep, color=i_entCol, style=line.style_solid, width=lW+1))
+    array.push(d_sl,  line.new(bar_index, slP, rE, slP, color=i_slCol, style=line.style_dashed, width=lW+1))
+    array.push(d_t0,  tp0On ? line.new(bar_index, t0, rE, t0, color=color.new(i_tpCol, 30), style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
+    array.push(d_t1,  line.new(bar_index, t1, rE, t1, color=i_tpCol, style=line.style_dotted, width=lW))
+    array.push(d_t2,  line.new(bar_index, t2, rE, t2, color=i_tpCol, style=line.style_dotted, width=lW))
+    array.push(d_t3,  line.new(bar_index, t3, rE, t3, color=i_tpCol, style=line.style_dotted, width=lW))
+    array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
+    array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
-    // Signal label
-    string sigTxt = dir == 1 ? "BUY" : "SELL"
-    float sigY    = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
-    array.push(d_sigLbl, label.new(bar_index, sigY, sigTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=mCol, textcolor=i_txtCol, size=size.large))
+    // Signal label + score
+    string sTxt = dir == 1 ? "BUY" : "SELL"
+    float sY   = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=mC, textcolor=i_txtCol, size=size.large))
 
-    // Price labels (conditional)
-    array.push(d_entLbl, showLbls ? label.new(rEdge, ep,  "ENTRY " + str.tostring(ep, format.mintick),  style=label.style_label_left, color=color.new(mCol, 30),    textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
-    array.push(d_slLbl,  showLbls ? label.new(rEdge, slP, "SL "    + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(i_slCol, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
-    array.push(d_tp0Lbl, showLbls and useTP0 ? label.new(rEdge, t0, "TP0 " + str.tostring(t0, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_tp1Lbl, showLbls ? label.new(rEdge, t1, "TP1 " + str.tostring(t1, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_tp2Lbl, showLbls ? label.new(rEdge, t2, "TP2 " + str.tostring(t2, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_tp3Lbl, showLbls ? label.new(rEdge, t3, "TP3 " + str.tostring(t3, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_tp4Lbl, showLbls and showTP4 ? label.new(rEdge, t4, "TP4 " + str.tostring(t4, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
-    array.push(d_tp5Lbl, showLbls and showTP5 ? label.new(rEdge, t5, "TP5 " + str.tostring(t5, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    // Score label
+    color scCol = sc >= 80 ? i_buyCol : sc >= 50 ? color.yellow : i_sellCol
+    float scY   = dir == 1 ? low - atrVal * 1.0 : high + atrVal * 1.0
+    array.push(d_scr, label.new(bar_index, scY, str.tostring(sc, "#") + "%", style=label.style_none, textcolor=scCol, size=size.small))
 
-    // Result label placeholder
-    array.push(d_resLbl, label.new(bar_index, ep, ""))
+    // Price labels
+    array.push(d_eLbl, sLb ? label.new(rE, ep, "ENTRY " + str.tostring(ep, format.mintick), style=label.style_label_left, color=color.new(mC, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
+    array.push(d_sLbl, sLb ? label.new(rE, slP, "SL " + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(i_slCol, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
+    array.push(d_t0L,  sLb and tp0On ? label.new(rE, t0, "TP0 " + str.tostring(t0, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t1L,  sLb ? label.new(rE, t1, "TP1 " + str.tostring(t1, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t2L,  sLb ? label.new(rE, t2, "TP2 " + str.tostring(t2, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t3L,  sLb ? label.new(rE, t3, "TP3 " + str.tostring(t3, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t4L,  sLb and tp4On ? label.new(rE, t4, "TP4 " + str.tostring(t4, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_t5L,  sLb and tp5On ? label.new(rE, t5, "TP5 " + str.tostring(t5, format.mintick), style=label.style_label_left, color=color.new(i_tpCol, 50), textcolor=i_txtCol, size=size.tiny) : label.new(bar_index, ep, ""))
+    array.push(d_res, label.new(bar_index, ep, ""))
     true
 
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // ██  NEW SIGNALS
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
 if buyGo
-    createNewSetup(1)
-
+    createSetup(1)
 if sellGo
-    createNewSetup(-1)
+    createSetup(-1)
 
-// Trim oldest if over limit
 while array.size(s_bar) > i_maxSetups
     removeOldest()
 
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // ██  UPDATE ACTIVE SETUPS
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
 if array.size(s_bar) > 0
     for i = 0 to array.size(s_bar) - 1
-        if array.get(s_closed, i)
-            int _skip = 0
+        if array.get(s_cls, i)
+            int _sk = 0
         else
-            int   rE    = bar_index + 5
-            int   d     = array.get(s_dir, i)
-            bool  isBuy = d == 1
-            float curSL = array.get(s_sl, i)
-            float entP  = array.get(s_entry, i)
+            int   rE   = bar_index + 5
+            int   d    = array.get(s_dir, i)
+            bool  isB  = d == 1
+            float curS = array.get(s_sl, i)
+            float entP = array.get(s_entry, i)
 
-            // Extend drawings
+            // Extend
             box.set_right(array.get(d_box, i), rE)
-            line.set_x2(array.get(d_entry, i), rE)
-            line.set_x2(array.get(d_sl, i),    rE)
-            line.set_x2(array.get(d_tp0, i),   rE)
-            line.set_x2(array.get(d_tp1, i),   rE)
-            line.set_x2(array.get(d_tp2, i),   rE)
-            line.set_x2(array.get(d_tp3, i),   rE)
-            line.set_x2(array.get(d_tp4, i),   rE)
-            line.set_x2(array.get(d_tp5, i),   rE)
-            if showLbls
-                label.set_x(array.get(d_entLbl, i), rE)
-                label.set_x(array.get(d_slLbl, i),  rE)
-                label.set_x(array.get(d_tp0Lbl, i), rE)
-                label.set_x(array.get(d_tp1Lbl, i), rE)
-                label.set_x(array.get(d_tp2Lbl, i), rE)
-                label.set_x(array.get(d_tp3Lbl, i), rE)
-                label.set_x(array.get(d_tp4Lbl, i), rE)
-                label.set_x(array.get(d_tp5Lbl, i), rE)
+            line.set_x2(array.get(d_ent, i), rE)
+            line.set_x2(array.get(d_sl, i), rE)
+            line.set_x2(array.get(d_t0, i), rE)
+            line.set_x2(array.get(d_t1, i), rE)
+            line.set_x2(array.get(d_t2, i), rE)
+            line.set_x2(array.get(d_t3, i), rE)
+            line.set_x2(array.get(d_t4, i), rE)
+            line.set_x2(array.get(d_t5, i), rE)
+            if sLb
+                label.set_x(array.get(d_eLbl, i), rE)
+                label.set_x(array.get(d_sLbl, i), rE)
+                label.set_x(array.get(d_t0L, i), rE)
+                label.set_x(array.get(d_t1L, i), rE)
+                label.set_x(array.get(d_t2L, i), rE)
+                label.set_x(array.get(d_t3L, i), rE)
+                label.set_x(array.get(d_t4L, i), rE)
+                label.set_x(array.get(d_t5L, i), rE)
 
-            // ── Trailing SL ──
-            if trailSL and array.get(s_tp1Hit, i) and not array.get(s_slHit, i)
-                float trailDist = atrVal * trailATR
-                float newSL = isBuy ? high - trailDist : low + trailDist
-                if isBuy and newSL > curSL
-                    array.set(s_sl, i, newSL)
-                    line.set_y1(array.get(d_sl, i), newSL)
-                    line.set_y2(array.get(d_sl, i), newSL)
-                    if showLbls
-                        label.set_y(array.get(d_slLbl, i), newSL)
-                        label.set_text(array.get(d_slLbl, i), "TSL " + str.tostring(newSL, format.mintick))
-                if not isBuy and newSL < curSL
-                    array.set(s_sl, i, newSL)
-                    line.set_y1(array.get(d_sl, i), newSL)
-                    line.set_y2(array.get(d_sl, i), newSL)
-                    if showLbls
-                        label.set_y(array.get(d_slLbl, i), newSL)
-                        label.set_text(array.get(d_slLbl, i), "TSL " + str.tostring(newSL, format.mintick))
+            // Trailing SL
+            if tSL and array.get(s_tp1H, i) and not array.get(s_slH, i)
+                float tD  = atrVal * trA
+                float nSL = isB ? high - tD : low + tD
+                if isB and nSL > curS
+                    array.set(s_sl, i, nSL)
+                    line.set_y1(array.get(d_sl, i), nSL)
+                    line.set_y2(array.get(d_sl, i), nSL)
+                if not isB and nSL < curS
+                    array.set(s_sl, i, nSL)
+                    line.set_y1(array.get(d_sl, i), nSL)
+                    line.set_y2(array.get(d_sl, i), nSL)
 
-            // ── TP0 ──
-            if useTP0 and not array.get(s_tp0Hit, i)
-                if (isBuy and high >= array.get(s_tp0, i)) or (not isBuy and low <= array.get(s_tp0, i))
-                    array.set(s_tp0Hit, i, true)
-                    label.set_text(array.get(d_tp0Lbl, i), "V TP0 " + str.tostring(array.get(s_tp0, i), format.mintick))
-                    label.set_color(array.get(d_tp0Lbl, i), color.new(i_checkCol, 20))
+            // TP0
+            if tp0On and not array.get(s_tp0H, i)
+                if (isB and high >= array.get(s_tp0, i)) or (not isB and low <= array.get(s_tp0, i))
+                    array.set(s_tp0H, i, true)
+                    label.set_text(array.get(d_t0L, i), "V TP0")
+                    label.set_color(array.get(d_t0L, i), color.new(i_buyCol, 20))
 
-            // ── TP1 + Break-Even ──
-            if not array.get(s_tp1Hit, i)
-                if (isBuy and high >= array.get(s_tp1, i)) or (not isBuy and low <= array.get(s_tp1, i))
-                    array.set(s_tp1Hit, i, true)
-                    label.set_text(array.get(d_tp1Lbl, i), "V TP1 " + str.tostring(array.get(s_tp1, i), format.mintick))
-                    label.set_color(array.get(d_tp1Lbl, i), color.new(i_checkCol, 20))
-                    // Break-Even: move SL to entry
-                    if breakEven and not array.get(s_beSet, i)
-                        array.set(s_beSet, i, true)
+            // TP1 + BE
+            if not array.get(s_tp1H, i)
+                if (isB and high >= array.get(s_tp1, i)) or (not isB and low <= array.get(s_tp1, i))
+                    array.set(s_tp1H, i, true)
+                    label.set_text(array.get(d_t1L, i), "V TP1")
+                    label.set_color(array.get(d_t1L, i), color.new(i_buyCol, 20))
+                    if bEv and not array.get(s_be, i)
+                        array.set(s_be, i, true)
                         array.set(s_sl, i, entP)
                         line.set_y1(array.get(d_sl, i), entP)
                         line.set_y2(array.get(d_sl, i), entP)
                         line.set_color(array.get(d_sl, i), color.new(i_entCol, 40))
-                        if showLbls
-                            label.set_y(array.get(d_slLbl, i), entP)
-                            label.set_text(array.get(d_slLbl, i), "BE " + str.tostring(entP, format.mintick))
 
-            // ── TP2 ──
-            if not array.get(s_tp2Hit, i)
-                if (isBuy and high >= array.get(s_tp2, i)) or (not isBuy and low <= array.get(s_tp2, i))
-                    array.set(s_tp2Hit, i, true)
-                    label.set_text(array.get(d_tp2Lbl, i), "V TP2 " + str.tostring(array.get(s_tp2, i), format.mintick))
-                    label.set_color(array.get(d_tp2Lbl, i), color.new(i_checkCol, 20))
+            // TP2
+            if not array.get(s_tp2H, i)
+                if (isB and high >= array.get(s_tp2, i)) or (not isB and low <= array.get(s_tp2, i))
+                    array.set(s_tp2H, i, true)
+                    label.set_text(array.get(d_t2L, i), "V TP2")
+                    label.set_color(array.get(d_t2L, i), color.new(i_buyCol, 20))
 
-            // ── TP3 ──
-            if not array.get(s_tp3Hit, i)
-                if (isBuy and high >= array.get(s_tp3, i)) or (not isBuy and low <= array.get(s_tp3, i))
-                    array.set(s_tp3Hit, i, true)
-                    label.set_text(array.get(d_tp3Lbl, i), "V TP3 " + str.tostring(array.get(s_tp3, i), format.mintick))
-                    label.set_color(array.get(d_tp3Lbl, i), color.new(i_checkCol, 20))
+            // TP3
+            if not array.get(s_tp3H, i)
+                if (isB and high >= array.get(s_tp3, i)) or (not isB and low <= array.get(s_tp3, i))
+                    array.set(s_tp3H, i, true)
+                    label.set_text(array.get(d_t3L, i), "V TP3")
+                    label.set_color(array.get(d_t3L, i), color.new(i_buyCol, 20))
 
-            // ── TP4 ──
-            if showTP4 and not array.get(s_tp4Hit, i)
-                if (isBuy and high >= array.get(s_tp4, i)) or (not isBuy and low <= array.get(s_tp4, i))
-                    array.set(s_tp4Hit, i, true)
-                    label.set_text(array.get(d_tp4Lbl, i), "V TP4 " + str.tostring(array.get(s_tp4, i), format.mintick))
-                    label.set_color(array.get(d_tp4Lbl, i), color.new(i_checkCol, 20))
+            // TP4
+            if tp4On and not array.get(s_tp4H, i)
+                if (isB and high >= array.get(s_tp4, i)) or (not isB and low <= array.get(s_tp4, i))
+                    array.set(s_tp4H, i, true)
+                    label.set_text(array.get(d_t4L, i), "V TP4")
+                    label.set_color(array.get(d_t4L, i), color.new(i_buyCol, 20))
 
-            // ── TP5 (last = full TP) ──
-            if showTP5 and not array.get(s_tp5Hit, i)
-                if (isBuy and high >= array.get(s_tp5, i)) or (not isBuy and low <= array.get(s_tp5, i))
-                    array.set(s_tp5Hit, i, true)
-                    label.set_text(array.get(d_tp5Lbl, i), "V TP5 " + str.tostring(array.get(s_tp5, i), format.mintick))
-                    label.set_color(array.get(d_tp5Lbl, i), color.new(i_checkCol, 20))
-                    array.set(s_closed, i, true)
-                    box.set_border_color(array.get(d_box, i), i_checkCol)
-                    box.set_bgcolor(array.get(d_box, i), color.new(i_checkCol, 90))
-                    float rY = isBuy ? high + atrVal * 0.3 : low - atrVal * 0.3
-                    label.delete(array.get(d_resLbl, i))
-                    array.set(d_resLbl, i, label.new(bar_index, rY, "FULL TP", style=isBuy ? label.style_label_down : label.style_label_up, color=i_checkCol, textcolor=color.black, size=size.normal))
+            // TP5 (full)
+            if tp5On and not array.get(s_tp5H, i)
+                if (isB and high >= array.get(s_tp5, i)) or (not isB and low <= array.get(s_tp5, i))
+                    array.set(s_tp5H, i, true)
+                    array.set(s_cls, i, true)
+                    label.set_text(array.get(d_t5L, i), "V TP5")
+                    label.set_color(array.get(d_t5L, i), color.new(i_buyCol, 20))
+                    float ry = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
+                    label.delete(array.get(d_res, i))
+                    array.set(d_res, i, label.new(bar_index, ry, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
 
-            // If TP4/5 hidden, close on TP3
-            if not showTP5 and not showTP4 and array.get(s_tp3Hit, i) and not array.get(s_closed, i)
-                array.set(s_closed, i, true)
-                box.set_border_color(array.get(d_box, i), i_checkCol)
-                box.set_bgcolor(array.get(d_box, i), color.new(i_checkCol, 90))
-                float rY3 = isBuy ? high + atrVal * 0.3 : low - atrVal * 0.3
-                label.delete(array.get(d_resLbl, i))
-                array.set(d_resLbl, i, label.new(bar_index, rY3, "FULL TP", style=isBuy ? label.style_label_down : label.style_label_up, color=i_checkCol, textcolor=color.black, size=size.normal))
+            // Close on highest visible TP
+            if not tp5On and not tp4On and array.get(s_tp3H, i) and not array.get(s_cls, i)
+                array.set(s_cls, i, true)
+                float ry2 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
+                label.delete(array.get(d_res, i))
+                array.set(d_res, i, label.new(bar_index, ry2, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
+            if not tp5On and tp4On and array.get(s_tp4H, i) and not array.get(s_cls, i)
+                array.set(s_cls, i, true)
+                float ry3 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
+                label.delete(array.get(d_res, i))
+                array.set(d_res, i, label.new(bar_index, ry3, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=i_buyCol, textcolor=color.black, size=size.normal))
 
-            // If only TP4 hidden, close on TP4 level actually means TP3 is last visible but TP4 still tracked
-            if not showTP5 and showTP4 and array.get(s_tp4Hit, i) and not array.get(s_closed, i)
-                array.set(s_closed, i, true)
-                box.set_border_color(array.get(d_box, i), i_checkCol)
-                box.set_bgcolor(array.get(d_box, i), color.new(i_checkCol, 90))
-                float rY4 = isBuy ? high + atrVal * 0.3 : low - atrVal * 0.3
-                label.delete(array.get(d_resLbl, i))
-                array.set(d_resLbl, i, label.new(bar_index, rY4, "FULL TP", style=isBuy ? label.style_label_down : label.style_label_up, color=i_checkCol, textcolor=color.black, size=size.normal))
+            // SL hit
+            if not array.get(s_slH, i) and not array.get(s_cls, i)
+                float cSL = array.get(s_sl, i)
+                if (isB and low <= cSL) or (not isB and high >= cSL)
+                    array.set(s_slH, i, true)
+                    array.set(s_cls, i, true)
+                    label.set_text(array.get(d_sLbl, i), "X SL")
+                    label.set_color(array.get(d_sLbl, i), color.new(i_slCol, 10))
+                    line.set_color(array.get(d_ent, i), color.new(i_entCol, 70))
+                    float ry4 = isB ? low - atrVal * 0.3 : high + atrVal * 0.3
+                    label.delete(array.get(d_res, i))
+                    array.set(d_res, i, label.new(bar_index, ry4, "STOPPED", style=isB ? label.style_label_up : label.style_label_down, color=i_slCol, textcolor=i_txtCol, size=size.normal))
 
-            // ── SL hit ──
-            if not array.get(s_slHit, i) and not array.get(s_closed, i)
-                float checkSL = array.get(s_sl, i)
-                if (isBuy and low <= checkSL) or (not isBuy and high >= checkSL)
-                    array.set(s_slHit, i, true)
-                    array.set(s_closed, i, true)
-                    label.set_text(array.get(d_slLbl, i), "X SL " + str.tostring(checkSL, format.mintick))
-                    label.set_color(array.get(d_slLbl, i), color.new(i_slCol, 10))
-                    box.set_border_color(array.get(d_box, i), i_slCol)
-                    box.set_bgcolor(array.get(d_box, i), color.new(i_slCol, 92))
-                    line.set_color(array.get(d_entry, i), color.new(i_entCol, 70))
-                    float rY2 = isBuy ? low - atrVal * 0.3 : high + atrVal * 0.3
-                    label.delete(array.get(d_resLbl, i))
-                    array.set(d_resLbl, i, label.new(bar_index, rY2, "STOPPED", style=isBuy ? label.style_label_up : label.style_label_down, color=i_slCol, textcolor=i_txtCol, size=size.normal))
+            // Expire
+            if bar_index - array.get(s_bar, i) > 200 and not array.get(s_cls, i)
+                array.set(s_cls, i, true)
 
-            // Expire stale
-            if bar_index - array.get(s_bar, i) > 200 and not array.get(s_closed, i)
-                array.set(s_closed, i, true)
+// ═══════════════════════════════════════════════════════
+// ██  BACKGROUND: Premium / Discount / OTE / Sessions
+// ═══════════════════════════════════════════════════════
 
-// ─────────────────────────────────────────────────────
-// ██  PREMIUM / DISCOUNT BACKGROUND
-// ─────────────────────────────────────────────────────
+bgcolor(i_showPD and inPrem ? color.new(i_sellCol, 95) : na, title="Premium")
+bgcolor(i_showPD and inDisc ? color.new(i_buyCol,  95) : na, title="Discount")
+bgcolor(i_showOTE and inOTE ? color.new(#FFC107, 95)   : na, title="OTE Zone")
+bgcolor(i_showSessBG and londonSess and i_sessLon ? color.new(#2196F3, 97) : na, title="London")
+bgcolor(i_showSessBG and nySess and i_sessNY      ? color.new(#FF9800, 97) : na, title="New York")
+bgcolor(i_showSessBG and asiaSess and i_sessAsia   ? color.new(#9C27B0, 97) : na, title="Asia")
 
-bool inPrem = close > rangeMid + rangeQ
-bool inDisc = close < rangeMid - rangeQ
-
-bgcolor(i_showPD and inPrem ? color.new(i_sellCol, 95) : na, title="Premium BG")
-bgcolor(i_showPD and inDisc ? color.new(i_buyCol,  95) : na, title="Discount BG")
-
-// ─────────────────────────────────────────────────────
-// ██  EMA LINES
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ██  PLOTS
+// ═══════════════════════════════════════════════════════
 
 plot(i_useEMA ? emaVal : na, "EMA", color=color.new(color.gray, 60), linewidth=1)
 plot(i_useHTF ? htfEma : na, "HTF EMA", color=color.new(color.orange, 50), linewidth=2)
 
-// ─────────────────────────────────────────────────────
-// ██  INFO DASHBOARD
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// ██  DASHBOARD
+// ═══════════════════════════════════════════════════════
 
-var table dash = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_width=1, border_color=color.new(color.gray, 70))
+var table dash = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 15), border_width=1, border_color=color.new(color.gray, 70))
 
 if barstate.islast
-    string tTxt = trend == 1 ? "BULLISH" : trend == -1 ? "BEARISH" : "NEUTRAL"
-    color  tCol = trend == 1 ? i_buyCol  : trend == -1 ? i_sellCol : color.gray
-    string zTxt = inPrem ? "PREMIUM" : inDisc ? "DISCOUNT" : "EQUILIBRIUM"
-    color  zCol = inPrem ? i_sellCol : inDisc ? i_buyCol   : color.gray
-    string mTxt = i_scalpMode ? "SCALPING" : "STANDARD"
-    color  mCol2 = i_scalpMode ? color.yellow : color.silver
+    string tTxt  = trend == 1 ? "BULLISH" : trend == -1 ? "BEARISH" : "NEUTRAL"
+    color  tCol  = trend == 1 ? i_buyCol : trend == -1 ? i_sellCol : color.gray
+    string zTxt  = inPrem ? "PREMIUM" : inDisc ? "DISCOUNT" : inOTE ? "OTE" : "EQUILIBRIUM"
+    color  zCol  = inPrem ? i_sellCol : inDisc ? i_buyCol : inOTE ? color.yellow : color.gray
+    string mTxt  = i_scalpMode ? "SCALPING" : "STANDARD"
+    color  mCol  = i_scalpMode ? color.yellow : color.silver
+    string strTx = bosUp ? "BOS UP" : bosDown ? "BOS DN" : chochUp ? "CHoCH UP" : chochDown ? "CHoCH DN" : "---"
+    string lTxt  = sslSwept ? "SSL Taken" : bslSwept ? "BSL Taken" : "---"
+    string rgTxt = regime_trend ? "TRENDING" : regime_range ? "RANGING" : regime_vol ? "VOLATILE" : "NORMAL"
+    color  rgCol = regime_trend ? i_buyCol : regime_range ? color.yellow : regime_vol ? i_sellCol : color.gray
+    float  topSc = trend == 1 ? finalScoreUp : trend == -1 ? finalScoreDn : math.max(finalScoreUp, finalScoreDn)
+    color  scCol = topSc >= 80 ? i_buyCol : topSc >= 50 ? color.yellow : i_sellCol
+    string vlTxt = climaxVol ? "CLIMAX" : highVol ? "HIGH" : "NORMAL"
+    color  vlCol = climaxVol ? i_sellCol : highVol ? i_buyCol : color.gray
 
-    int activeN = 0
+    int aN = 0
     for j = 0 to math.max(array.size(s_bar) - 1, 0)
         if j < array.size(s_bar)
-            if not array.get(s_closed, j)
-                activeN += 1
+            if not array.get(s_cls, j)
+                aN += 1
 
-    table.cell(dash, 0, 0, "MODE",    text_color=color.gray,   text_size=size.tiny)
-    table.cell(dash, 1, 0, mTxt,      text_color=mCol2,        text_size=size.small)
-    table.cell(dash, 0, 1, "TREND",   text_color=color.gray,   text_size=size.tiny)
-    table.cell(dash, 1, 1, tTxt,      text_color=tCol,          text_size=size.small)
-    table.cell(dash, 0, 2, "ZONE",    text_color=color.gray,   text_size=size.tiny)
-    table.cell(dash, 1, 2, zTxt,      text_color=zCol,          text_size=size.small)
-    table.cell(dash, 0, 3, "RSI",     text_color=color.gray,   text_size=size.tiny)
-    table.cell(dash, 1, 3, str.tostring(rsiVal, "#.0"), text_color=rsiVal > rsiOB ? i_sellCol : rsiVal < rsiOS ? i_buyCol : color.silver, text_size=size.small)
-    table.cell(dash, 0, 4, "ACTIVE",  text_color=color.gray,   text_size=size.tiny)
-    table.cell(dash, 1, 4, str.tostring(activeN), text_color=color.silver, text_size=size.small)
+    table.cell(dash, 0, 0, "MODE",      text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 0, mTxt,        text_color=mCol,       text_size=size.small)
+    table.cell(dash, 0, 1, "TREND",     text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 1, tTxt,        text_color=tCol,       text_size=size.small)
+    table.cell(dash, 0, 2, "STRUCTURE", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 2, strTx,       text_color=tCol,       text_size=size.small)
+    table.cell(dash, 0, 3, "LIQUIDITY", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 3, lTxt,        text_color=color.orange,text_size=size.small)
+    table.cell(dash, 0, 4, "ZONE",      text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 4, zTxt,        text_color=zCol,       text_size=size.small)
+    table.cell(dash, 0, 5, "VOLUME",    text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 5, vlTxt,       text_color=vlCol,      text_size=size.small)
+    table.cell(dash, 0, 6, "RSI",       text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 6, str.tostring(rsiVal, "#.0"), text_color=rsiVal > rsOB ? i_sellCol : rsiVal < rsOS ? i_buyCol : color.silver, text_size=size.small)
+    table.cell(dash, 0, 7, "REGIME",    text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 7, rgTxt,       text_color=rgCol,      text_size=size.small)
+    table.cell(dash, 0, 8, "SCORE",     text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 8, str.tostring(topSc, "#") + "%", text_color=scCol, text_size=size.small)
+    table.cell(dash, 0, 9, "ACTIVE",    text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 9, str.tostring(aN), text_color=color.silver, text_size=size.small)
 
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 // ██  ALERTS
-// ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
 
-alertcondition(buyGo,  title="BUY Signal",  message="BUY Signal — Institutional Liquidity Premium")
-alertcondition(sellGo, title="SELL Signal",  message="SELL Signal — Institutional Liquidity Premium")
+alertcondition(buyGo,    title="BUY Signal",   message="BUY — Institutional Liquidity Premium")
+alertcondition(sellGo,   title="SELL Signal",   message="SELL — Institutional Liquidity Premium")
+alertcondition(chochUp,  title="CHoCH Bullish", message="CHoCH Bullish — possible trend reversal")
+alertcondition(chochDown,title="CHoCH Bearish", message="CHoCH Bearish — possible trend reversal")
+alertcondition(bslSweep, title="BSL Swept",     message="Buy Side Liquidity Swept")
+alertcondition(sslSweep, title="SSL Swept",     message="Sell Side Liquidity Swept")
