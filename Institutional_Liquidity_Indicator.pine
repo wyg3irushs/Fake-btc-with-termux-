@@ -1,9 +1,9 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © wyg3irushs — Institutional Liquidity Premium v4.1 (Full SMC System)
+// © wyg3irushs — Institutional Liquidity Premium v5 (Full SMC System)
 
 //@version=5
-indicator("Institutional Liquidity Premium v4.1", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Institutional Liquidity Premium v5", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ═══════════════════════════════════════════════════════
 // ██  INPUTS
@@ -82,14 +82,18 @@ i_sessAsia    = input.bool(false,  "Asia",            group="Sessions")
 i_showSessBG  = input.bool(true,   "Session BG",      group="Sessions")
 
 // ── Design ──
-i_buyCol      = input.color(#00E676, "Buy",           group="Design")
-i_sellCol     = input.color(#FF1744, "Sell",           group="Design")
+i_buyCol      = input.color(#00FF41, "Buy",           group="Design")
+i_sellCol     = input.color(#FF073A, "Sell",           group="Design")
 i_slCol       = input.color(#FF5252, "SL",             group="Design")
-i_tpCol       = input.color(#69F0AE, "TP",             group="Design")
+i_tpCol       = input.color(#39FF14, "TP",             group="Design")
 i_entCol      = input.color(#FFFFFF, "Entry",           group="Design")
-i_obCol       = input.color(#2196F3, "OB Color",       group="Design")
-i_fvgCol      = input.color(#AB47BC, "FVG Color",      group="Design")
+i_obCol       = input.color(#00B0FF, "OB Color",       group="Design")
+i_fvgCol      = input.color(#E040FB, "FVG Color",      group="Design")
 i_txtCol      = input.color(#FFFFFF, "Text",            group="Design")
+i_cloudCol1   = input.color(#00FF41, "Cloud Bull",     group="Design")
+i_cloudCol2   = input.color(#FF073A, "Cloud Bear",     group="Design")
+i_showCloud   = input.bool(true,    "Trend Cloud",     group="Design")
+i_showMaxPft  = input.bool(true,    "Max Profit Labels",group="Design")
 i_maxSetups   = input.int(5,        "Max Setups",      minval=1,  maxval=15,  group="Design")
 i_showBox     = input.bool(true,    "Setup Box",       group="Design")
 i_showLabels  = input.bool(true,    "Price Labels",    group="Design")
@@ -138,6 +142,7 @@ trA       = i_trailATR
 
 atrVal   = ta.atr(atLen)
 emaVal   = ta.ema(close, emL)
+emaFast  = ta.ema(close, math.max(emL - 10, 3))
 rsiVal   = ta.rsi(close, rsL)
 avgVol   = ta.sma(volume, 20)
 rangeH   = ta.highest(high, i_pdLen)
@@ -148,6 +153,16 @@ rangeQ   = (rangeH - rangeL) * 0.25
 // HTF data
 htfEma    = request.security(syminfo.tickerid, i_htfTF, ta.ema(close, i_htfEmaLen), lookahead=barmerge.lookahead_off)
 htfClose  = request.security(syminfo.tickerid, i_htfTF, close, lookahead=barmerge.lookahead_off)
+
+// Multi-TF dashboard data
+htf12hClose = request.security(syminfo.tickerid, "720", close, lookahead=barmerge.lookahead_off)
+htf12hEma   = request.security(syminfo.tickerid, "720", ta.ema(close, 20), lookahead=barmerge.lookahead_off)
+htf4hClose  = request.security(syminfo.tickerid, "240", close, lookahead=barmerge.lookahead_off)
+htf4hEma    = request.security(syminfo.tickerid, "240", ta.ema(close, 20), lookahead=barmerge.lookahead_off)
+htf1hClose  = request.security(syminfo.tickerid, "60",  close, lookahead=barmerge.lookahead_off)
+htf1hEma    = request.security(syminfo.tickerid, "60",  ta.ema(close, 20), lookahead=barmerge.lookahead_off)
+htfDClose   = request.security(syminfo.tickerid, "1D",  close, lookahead=barmerge.lookahead_off)
+htfDEma     = request.security(syminfo.tickerid, "1D",  ta.ema(close, 20), lookahead=barmerge.lookahead_off)
 
 // ── Premium / Discount / OTE ──
 bool inPrem = close > rangeMid + rangeQ
@@ -720,10 +735,11 @@ createSetup(int dir) =>
     array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
     array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=i_tpCol, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
-    // Signal label + score
-    string sTxt = dir == 1 ? "BUY" : "SELL"
+    // Signal label — STRONG fluorescent
+    string sTxt = dir == 1 ? "STRONG" : "STRONG"
     float sY   = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
-    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=mC, textcolor=i_txtCol, size=size.large))
+    color sigBG = dir == 1 ? color.new(i_buyCol, 10) : color.new(i_sellCol, 10)
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBG, textcolor=color.black, size=size.large))
 
     // Score label
     color scCol = sc >= 80 ? i_buyCol : sc >= 50 ? color.yellow : i_sellCol
@@ -895,31 +911,85 @@ bgcolor(i_showSessBG and nySess and i_sessNY      ? color.new(#FF9800, 97) : na,
 bgcolor(i_showSessBG and asiaSess and i_sessAsia   ? color.new(#9C27B0, 97) : na, title="Asia")
 
 // ═══════════════════════════════════════════════════════
-// ██  PLOTS
+// ██  TREND CLOUD + PLOTS
 // ═══════════════════════════════════════════════════════
 
-plot(i_useEMA ? emaVal : na, "EMA", color=color.new(color.gray, 60), linewidth=1)
+color cloudFill = emaVal > emaFast ? color.new(i_cloudCol2, 75) : color.new(i_cloudCol1, 75)
+p1 = plot(i_showCloud ? emaVal  : na, "EMA Slow",  color=color.new(color.gray, 80), linewidth=1)
+p2 = plot(i_showCloud ? emaFast : na, "EMA Fast",  color=color.new(color.gray, 80), linewidth=1)
+fill(p1, p2, color=i_showCloud ? cloudFill : na, title="Trend Cloud")
+
+plot(i_useEMA and not i_showCloud ? emaVal : na, "EMA", color=color.new(color.gray, 60), linewidth=1)
 plot(i_useHTF ? htfEma : na, "HTF EMA", color=color.new(color.orange, 50), linewidth=2)
+
+// ── Signal Dots (Orange circles like reference) ──
+plotshape(buyGo,  title="BUY Dot",  location=location.belowbar, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal)
+plotshape(sellGo, title="SELL Dot", location=location.abovebar, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal)
+
+// ── Fluorescent Arrows ──
+plotshape(buyGo,  title="BUY Arrow",  location=location.belowbar, style=shape.arrowup,   color=color.new(i_buyCol, 0),  size=size.small, offset=-1)
+plotshape(sellGo, title="SELL Arrow", location=location.abovebar, style=shape.arrowdown, color=color.new(i_sellCol, 0), size=size.small, offset=-1)
+
+// ═══════════════════════════════════════════════════════
+// ██  MAX PROFIT TRACKING
+// ═══════════════════════════════════════════════════════
+
+var float  mpEntry  = na
+var int    mpDir    = 0
+var float  mpMax    = 0.0
+var label  mpLabel  = na
+
+if buyGo
+    mpEntry := close
+    mpDir   := 1
+    mpMax   := 0.0
+    if not na(mpLabel)
+        label.delete(mpLabel)
+    mpLabel := na
+
+if sellGo
+    mpEntry := close
+    mpDir   := -1
+    mpMax   := 0.0
+    if not na(mpLabel)
+        label.delete(mpLabel)
+    mpLabel := na
+
+if not na(mpEntry) and mpDir != 0
+    float pnl = mpDir == 1 ? (high - mpEntry) / mpEntry * 100.0 : (mpEntry - low) / mpEntry * 100.0
+    if pnl > mpMax
+        mpMax := pnl
+        string mpTxt = (mpDir == 1 ? "Long Max Profit" : "Short Max Profit") + "\n+" + str.tostring(mpMax, "#.1") + "%"
+        color  mpCol = mpDir == 1 ? color.new(i_buyCol, 10) : color.new(i_sellCol, 10)
+        float  mpY   = mpDir == 1 ? high + atrVal * 0.4 : low - atrVal * 0.4
+        if i_showMaxPft
+            if not na(mpLabel)
+                label.set_text(mpLabel, mpTxt)
+                label.set_y(mpLabel, mpY)
+                label.set_x(mpLabel, bar_index)
+            else
+                mpLabel := label.new(bar_index, mpY, mpTxt, style=mpDir == 1 ? label.style_label_down : label.style_label_up, color=mpCol, textcolor=color.black, size=size.normal)
 
 // ═══════════════════════════════════════════════════════
 // ██  DASHBOARD
 // ═══════════════════════════════════════════════════════
 
-var table dash = table.new(position.bottom_right, 2, 12, bgcolor=color.new(color.black, 15), border_width=1, border_color=color.new(color.gray, 70))
+// ── Main Dashboard (bottom-right) ──
+var table dash = table.new(position.bottom_right, 2, 12, bgcolor=color.new(#0D0D0D, 5), border_width=1, border_color=color.new(#333333, 30))
 
 if barstate.islast
     string tTxt  = trend == 1 ? "BULLISH" : trend == -1 ? "BEARISH" : "NEUTRAL"
     color  tCol  = trend == 1 ? i_buyCol : trend == -1 ? i_sellCol : color.gray
     string zTxt  = inPrem ? "PREMIUM" : inDisc ? "DISCOUNT" : inOTE ? "OTE" : "EQUILIBRIUM"
-    color  zCol  = inPrem ? i_sellCol : inDisc ? i_buyCol : inOTE ? color.yellow : color.gray
+    color  zCol  = inPrem ? i_sellCol : inDisc ? i_buyCol : inOTE ? #FFD700 : color.gray
     string mTxt  = i_scalpMode ? "SCALPING" : "STANDARD"
-    color  mCol  = i_scalpMode ? color.yellow : color.silver
+    color  mCol  = i_scalpMode ? #FFD700 : color.silver
     string strTx = bosUp ? "BOS UP" : bosDown ? "BOS DN" : chochUp ? "CHoCH UP" : chochDown ? "CHoCH DN" : "---"
     string lTxt  = sslSwept ? "SSL Taken" : bslSwept ? "BSL Taken" : "---"
     string rgTxt = regime_trend ? "TRENDING" : regime_range ? "RANGING" : regime_vol ? "VOLATILE" : "NORMAL"
-    color  rgCol = regime_trend ? i_buyCol : regime_range ? color.yellow : regime_vol ? i_sellCol : color.gray
+    color  rgCol = regime_trend ? i_buyCol : regime_range ? #FFD700 : regime_vol ? i_sellCol : color.gray
     float  topSc = trend == 1 ? finalScoreUp : trend == -1 ? finalScoreDn : math.max(finalScoreUp, finalScoreDn)
-    color  scCol = topSc >= 80 ? i_buyCol : topSc >= 50 ? color.yellow : i_sellCol
+    color  scCol = topSc >= 80 ? i_buyCol : topSc >= 50 ? #FFD700 : i_sellCol
     string vlTxt = climaxVol ? "CLIMAX" : highVol ? "HIGH" : "NORMAL"
     color  vlCol = climaxVol ? i_sellCol : highVol ? i_buyCol : color.gray
 
@@ -929,30 +999,63 @@ if barstate.islast
             if not array.get(s_cls, j)
                 aN += 1
 
-    table.cell(dash, 0, 0, "MODE",      text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 0, mTxt,        text_color=mCol,       text_size=size.small)
-    table.cell(dash, 0, 1, "TREND",     text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 1, tTxt,        text_color=tCol,       text_size=size.small)
-    table.cell(dash, 0, 2, "STRUCTURE", text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 2, strTx,       text_color=tCol,       text_size=size.small)
-    table.cell(dash, 0, 3, "LIQUIDITY", text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 3, lTxt,        text_color=color.orange,text_size=size.small)
-    table.cell(dash, 0, 4, "ZONE",      text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 4, zTxt,        text_color=zCol,       text_size=size.small)
-    table.cell(dash, 0, 5, "VOLUME",    text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 5, vlTxt,       text_color=vlCol,      text_size=size.small)
-    table.cell(dash, 0, 6, "RSI",       text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 6, str.tostring(rsiVal, "#.0"), text_color=rsiVal > rsOB ? i_sellCol : rsiVal < rsOS ? i_buyCol : color.silver, text_size=size.small)
-    table.cell(dash, 0, 7, "REGIME",    text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 7, rgTxt,       text_color=rgCol,      text_size=size.small)
-    table.cell(dash, 0, 8, "SCORE",     text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 8, str.tostring(topSc, "#") + "%", text_color=scCol, text_size=size.small)
-    table.cell(dash, 0, 9, "ADX",       text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 9, str.tostring(adxVal, "#.0"), text_color=adxVal >= minADX ? i_buyCol : color.gray, text_size=size.small)
-    table.cell(dash, 0, 10, "RISK",     text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 10, str.tostring(atrPct, "#.2") + "%", text_color=atrPct > 0.5 ? i_buyCol : color.gray, text_size=size.small)
-    table.cell(dash, 0, 11, "ACTIVE",   text_color=color.gray, text_size=size.tiny)
-    table.cell(dash, 1, 11, str.tostring(aN), text_color=color.silver, text_size=size.small)
+    table.cell(dash, 0, 0, "MODE",      text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 0, mTxt,        text_color=mCol,    text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 1, "TREND",     text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 1, tTxt,        text_color=tCol,    text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 0, 2, "STRUCTURE", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 2, strTx,       text_color=tCol,    text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 3, "LIQUIDITY", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 3, lTxt,        text_color=#FF9800, text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 0, 4, "ZONE",      text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 4, zTxt,        text_color=zCol,    text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 5, "VOLUME",    text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 5, vlTxt,       text_color=vlCol,   text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 0, 6, "RSI",       text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 6, str.tostring(rsiVal, "#.0"), text_color=rsiVal > rsOB ? i_sellCol : rsiVal < rsOS ? i_buyCol : color.silver, text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 7, "REGIME",    text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 7, rgTxt,       text_color=rgCol,   text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 0, 8, "SCORE",     text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 8, str.tostring(topSc, "#") + "%", text_color=scCol, text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 9, "ADX",       text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 9, str.tostring(adxVal, "#.0"), text_color=adxVal >= minADX ? i_buyCol : color.gray, text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 0, 10, "RISK",     text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 1, 10, str.tostring(atrPct, "#.2") + "%", text_color=atrPct > 0.5 ? i_buyCol : color.gray, text_size=size.small, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(dash, 0, 11, "ACTIVE",   text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    table.cell(dash, 1, 11, str.tostring(aN), text_color=color.silver, text_size=size.small, bgcolor=color.new(#111111, 10))
+
+// ── Multi-TF Panel (top-right) ──
+var table mtfPanel = table.new(position.top_right, 5, 3, bgcolor=color.new(#0D0D0D, 5), border_width=1, border_color=color.new(#333333, 30))
+
+if barstate.islast
+    // Headers
+    table.cell(mtfPanel, 0, 0, "",    text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 1, 0, "1D",  text_color=#CCCCCC, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 2, 0, "12h", text_color=#CCCCCC, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 3, 0, "4h",  text_color=#CCCCCC, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 4, 0, "1h",  text_color=#CCCCCC, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+
+    // Main Trend row
+    table.cell(mtfPanel, 0, 1, "Trend", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#111111, 10))
+    color d1c  = htfDClose > htfDEma ? i_buyCol : i_sellCol
+    color h12c = htf12hClose > htf12hEma ? i_buyCol : i_sellCol
+    color h4c  = htf4hClose > htf4hEma ? i_buyCol : i_sellCol
+    color h1c  = htf1hClose > htf1hEma ? i_buyCol : i_sellCol
+    table.cell(mtfPanel, 1, 1, htfDClose > htfDEma ? "▲" : "▼",   text_color=d1c,  text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(mtfPanel, 2, 1, htf12hClose > htf12hEma ? "▲" : "▼", text_color=h12c, text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(mtfPanel, 3, 1, htf4hClose > htf4hEma ? "▲" : "▼",  text_color=h4c,  text_size=size.small, bgcolor=color.new(#111111, 10))
+    table.cell(mtfPanel, 4, 1, htf1hClose > htf1hEma ? "▲" : "▼",  text_color=h1c,  text_size=size.small, bgcolor=color.new(#111111, 10))
+
+    // Strength row
+    table.cell(mtfPanel, 0, 2, "Str", text_color=#888888, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    float d1s  = htfDClose != 0 and htfDEma != 0 ? math.abs(htfDClose - htfDEma) / htfDClose * 100 : 0
+    float h12s = htf12hClose != 0 and htf12hEma != 0 ? math.abs(htf12hClose - htf12hEma) / htf12hClose * 100 : 0
+    float h4s  = htf4hClose != 0 and htf4hEma != 0 ? math.abs(htf4hClose - htf4hEma) / htf4hClose * 100 : 0
+    float h1s  = htf1hClose != 0 and htf1hEma != 0 ? math.abs(htf1hClose - htf1hEma) / htf1hClose * 100 : 0
+    table.cell(mtfPanel, 1, 2, str.tostring(d1s, "#.1") + "%",  text_color=d1c,  text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 2, 2, str.tostring(h12s, "#.1") + "%", text_color=h12c, text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 3, 2, str.tostring(h4s, "#.1") + "%",  text_color=h4c,  text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
+    table.cell(mtfPanel, 4, 2, str.tostring(h1s, "#.1") + "%",  text_color=h1c,  text_size=size.tiny, bgcolor=color.new(#1A1A1A, 10))
 
 // ═══════════════════════════════════════════════════════
 // ██  ALERTS
