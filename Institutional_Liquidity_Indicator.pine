@@ -1001,16 +1001,8 @@ if not na(mpEntry) and mpDir != 0
 // ██  DASHBOARD
 // ═══════════════════════════════════════════════════════
 
-// ── Combined Dashboard (top-right, 1:1 reference layout) ──
-// Row 0: Title   | "Main Trend" header | "CHDS Strength" header | "Directivity" header
-// Row 1: TF headers   | 1D  | 12h  | 4h  | 1h
-// Row 2: Trend arrows  | ▲/▼ | ▲/▼ | ▲/▼ | ▲/▼
-// Row 3: Strength %    | x.x%| x.x%| x.x%| x.x%
-// Row 4: separator
-// Row 5: "Signal Stats" header
-// Row 6-9: Mode/Mark/Contra/Adv
-
-var table dash = table.new(position.top_right, 5, 10, bgcolor=color.new(#0D0D0D, 5), border_width=1, border_color=color.new(#222222, 30))
+// ── Combined Dashboard (bottom-right, compact for mobile) ──
+var table dash = table.new(position.bottom_right, 5, 10, bgcolor=color.new(#0D0D0D, 5), border_width=1, border_color=color.new(#222222, 30))
 
 if barstate.islast
     // Compute values
