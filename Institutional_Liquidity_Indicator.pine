@@ -1,9 +1,9 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © wyg3irushs — Institutional Liquidity Premium v6 (Optimized SMC System)
+// © wyg3irushs — Institutional Liquidity Premium v7 (Pro Scalper Labels + Tuned Sensitivity)
 
 //@version=5
-indicator("Institutional Liquidity Premium v6", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("Institutional Liquidity Premium v7", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ═══════════════════════════════════════════════════════
 // ██  INPUTS
@@ -18,7 +18,7 @@ i_atrLen      = input.int(14,      "ATR Length",       minval=3,   maxval=50,  g
 i_atrMult     = input.float(1.5,   "ATR Mult (SL)",   minval=0.3, maxval=5.0, step=0.1, group="Signal Engine")
 i_cooldown    = input.int(10,      "Cooldown (bars)",  minval=0,   maxval=50,  group="Signal Engine")
 i_minAtrPct   = input.float(0.0,   "Min ATR %",       minval=0.0, maxval=2.0, step=0.1, group="Signal Engine")
-i_minScore    = input.int(70,      "Min Score %",     minval=0,   maxval=100, group="Signal Engine")
+i_minScore    = input.int(40,      "Min Score %",     minval=0,   maxval=100, group="Signal Engine")
 i_minADX      = input.int(20,      "Min ADX",         minval=0,   maxval=50,  group="Signal Engine")
 i_useADX      = input.bool(true,   "ADX Filter",      group="Signal Engine")
 i_useVolKill  = input.bool(true,   "ATR Vol Kill",    group="Signal Engine")
@@ -55,9 +55,9 @@ i_showFVG     = input.bool(true,   "Fair Value Gaps",            group="SMC Feat
 i_showOB      = input.bool(true,   "Order Blocks",               group="SMC Features")
 i_showMit     = input.bool(true,   "Mitigation Blocks",          group="SMC Features")
 i_showCHoCH   = input.bool(true,   "CHoCH Labels",               group="SMC Features")
-i_fvgRetest   = input.bool(true,   "FVG Retest Entry",           group="SMC Features")
-i_pdFilter    = input.bool(true,   "Premium/Discount Filter",    group="SMC Features")
-i_liqConfirm  = input.bool(true,   "Liquidity Grab Confirm",     group="SMC Features")
+i_fvgRetest   = input.bool(false,  "FVG Retest Entry",           group="SMC Features")
+i_pdFilter    = input.bool(false,  "Premium/Discount Filter",    group="SMC Features")
+i_liqConfirm  = input.bool(false,  "Liquidity Grab Confirm",     group="SMC Features")
 i_eqTol       = input.float(0.1,   "Equal H/L Tolerance %", minval=0.01, maxval=1.0, step=0.01, group="SMC Features")
 i_showKillZ   = input.bool(false,  "Kill Zones (Liq+FVG+Disc)",  group="SMC Features")
 i_showLiqPool = input.bool(false,  "Liquidity Pools",            group="SMC Features")
@@ -842,15 +842,15 @@ createSetup(int dir) =>
     array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
     array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
-    // Signal label — STRONG floating text (no bg, like reference)
-    string sTxt = "STRONG"
-    float sY   = dir == 1 ? low - atrVal * 1.2 : high + atrVal * 1.2
-    color sigTxt = dir == 1 ? buyC : sellC
-    array.push(d_sig, label.new(bar_index, sY, sTxt, style=label.style_none, textcolor=sigTxt, size=size.normal, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
+    // Signal label — solid BUY / SELL box (Pro Scalper style)
+    string sTxt = dir == 1 ? "BUY" : "SELL"
+    float sY   = dir == 1 ? low - atrVal * 0.3 : high + atrVal * 0.3
+    color sigBg  = dir == 1 ? buyC : sellC
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBg, textcolor=color.white, size=size.normal, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
 
-    // Score label (below STRONG)
+    // Score label (next to BUY/SELL)
     color scCol2 = sc >= 80 ? buyC : sc >= 50 ? #FFD700 : sellC
-    float scY   = dir == 1 ? low - atrVal * 1.8 : high + atrVal * 1.8
+    float scY   = dir == 1 ? low - atrVal * 1.5 : high + atrVal * 1.5
     array.push(d_scr, label.new(bar_index, scY, str.tostring(sc, "#") + "%", style=label.style_none, textcolor=scCol2, size=size.tiny))
 
     // Price labels
@@ -1059,13 +1059,8 @@ plot(i_showVWAP ? vwapVal : na, "VWAP", color=color.new(#FF6B6B, 30), linewidth=
 // ── Bar Coloring (like reference) ──
 barcolor(i_showBarCol ? (stDir == 1 ? cldBul : cldBer) : na)
 
-// ── Signal Dots — large orange/gold circles (like reference) ──
-plotshape(buyGo,  title="BUY Dot",  location=location.absolute, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal, offset=0)
-plotshape(sellGo, title="SELL Dot", location=location.absolute, style=shape.circle, color=color.new(#FF9800, 0), size=size.normal, offset=0)
-
-// ── Small Arrows (green up, red down — like reference) ──
-plotshape(buyGo,  title="BUY Arrow",  location=location.belowbar, style=shape.arrowup,   color=color.new(buyC, 0),  size=size.tiny)
-plotshape(sellGo, title="SELL Arrow", location=location.abovebar, style=shape.arrowdown, color=color.new(sellC, 0), size=size.tiny)
+// ── Signal shapes removed — BUY/SELL labels in createSetup are the primary visual ──
+// (Pro Scalper style: solid colored BUY / SELL label boxes)
 
 // ── RSI (overlay=true can't use display.pane) ──
 plot(na, "RSI", color=color.new(#E040FB, 30), linewidth=1, editable=false, display=display.none)
