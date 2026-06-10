@@ -738,8 +738,30 @@ var array<label> d_res    = array.new_label()
 var array<label> d_scr    = array.new_label()
 
 // ═══════════════════════════════════════════════════════
-// ██  HELPER
+// ██  HELPERS
 // ═══════════════════════════════════════════════════════
+
+// Cleanup: delete all trade drawings when setup closes (keep BUY/SELL + score labels)
+cleanupDrawings(int idx) =>
+    box.delete(array.get(d_box, idx))
+    line.delete(array.get(d_ent, idx))
+    line.delete(array.get(d_sl, idx))
+    line.delete(array.get(d_t0, idx))
+    line.delete(array.get(d_t1, idx))
+    line.delete(array.get(d_t2, idx))
+    line.delete(array.get(d_t3, idx))
+    line.delete(array.get(d_t4, idx))
+    line.delete(array.get(d_t5, idx))
+    label.delete(array.get(d_eLbl, idx))
+    label.delete(array.get(d_sLbl, idx))
+    label.delete(array.get(d_t0L, idx))
+    label.delete(array.get(d_t1L, idx))
+    label.delete(array.get(d_t2L, idx))
+    label.delete(array.get(d_t3L, idx))
+    label.delete(array.get(d_t4L, idx))
+    label.delete(array.get(d_t5L, idx))
+    label.delete(array.get(d_res, idx))
+    true
 
 removeOldest() =>
     if array.size(s_bar) > 0
@@ -842,11 +864,11 @@ createSetup(int dir) =>
     array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
     array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
-    // Signal label — solid BUY / SELL box (Pro Scalper style)
+    // Signal label — solid BUY / SELL box (Pro Scalper style, large)
     string sTxt = dir == 1 ? "BUY" : "SELL"
-    float sY   = dir == 1 ? low - atrVal * 0.3 : high + atrVal * 0.3
+    float sY   = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
     color sigBg  = dir == 1 ? buyC : sellC
-    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBg, textcolor=color.white, size=size.normal, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBg, textcolor=color.white, size=size.large, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
 
     // Score label (next to BUY/SELL)
     color scCol2 = sc >= 80 ? buyC : sc >= 50 ? #FFD700 : sellC
@@ -971,33 +993,26 @@ if array.size(s_bar) > 0
                 if (isB and high >= array.get(s_tp5, i)) or (not isB and low <= array.get(s_tp5, i))
                     array.set(s_tp5H, i, true)
                     array.set(s_cls, i, true)
-                    label.set_text(array.get(d_t5L, i), "V TP5")
-                    label.set_color(array.get(d_t5L, i), color.new(buyC, 20))
-                    float ry = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
-                    label.delete(array.get(d_res, i))
-                    array.set(d_res, i, label.new(bar_index, ry, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
                     // Win rate tracking
                     totalTrades += 1
                     winTrades   += 1
                     totalProfit += math.abs(array.get(s_tp5, i) - entP)
+                    // Cleanup — remove all trade drawings (keep BUY/SELL label)
+                    cleanupDrawings(i)
 
             // Close on highest visible TP
             if not tp5On and not tp4On and array.get(s_tp3H, i) and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
-                float ry2 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
-                label.delete(array.get(d_res, i))
-                array.set(d_res, i, label.new(bar_index, ry2, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
                 totalTrades += 1
                 winTrades   += 1
                 totalProfit += math.abs(array.get(s_tp3, i) - entP)
+                cleanupDrawings(i)
             if not tp5On and tp4On and array.get(s_tp4H, i) and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
-                float ry3 = isB ? high + atrVal * 0.3 : low - atrVal * 0.3
-                label.delete(array.get(d_res, i))
-                array.set(d_res, i, label.new(bar_index, ry3, "FULL TP", style=isB ? label.style_label_down : label.style_label_up, color=buyC, textcolor=color.black, size=size.normal))
                 totalTrades += 1
                 winTrades   += 1
                 totalProfit += math.abs(array.get(s_tp4, i) - entP)
+                cleanupDrawings(i)
 
             // SL hit
             if not array.get(s_slH, i) and not array.get(s_cls, i)
@@ -1005,19 +1020,16 @@ if array.size(s_bar) > 0
                 if (isB and low <= cSL) or (not isB and high >= cSL)
                     array.set(s_slH, i, true)
                     array.set(s_cls, i, true)
-                    label.set_text(array.get(d_sLbl, i), "X SL")
-                    label.set_color(array.get(d_sLbl, i), color.new(slC, 10))
-                    line.set_color(array.get(d_ent, i), color.new(i_entCol, 70))
-                    float ry4 = isB ? low - atrVal * 0.3 : high + atrVal * 0.3
-                    label.delete(array.get(d_res, i))
-                    array.set(d_res, i, label.new(bar_index, ry4, "STOPPED", style=isB ? label.style_label_up : label.style_label_down, color=slC, textcolor=i_txtCol, size=size.normal))
                     // Loss tracking
                     totalTrades += 1
                     totalLoss   += math.abs(entP - cSL)
+                    // Cleanup — remove all trade drawings (keep BUY/SELL label)
+                    cleanupDrawings(i)
 
-            // Expire
-            if bar_index - array.get(s_bar, i) > 200 and not array.get(s_cls, i)
+            // Expire (50 bars max for clean chart)
+            if bar_index - array.get(s_bar, i) > 50 and not array.get(s_cls, i)
                 array.set(s_cls, i, true)
+                cleanupDrawings(i)
 
 // ═══════════════════════════════════════════════════════
 // ██  BACKGROUND: Premium / Discount / OTE / Sessions / Kill Zones
