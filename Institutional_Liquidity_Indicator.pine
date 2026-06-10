@@ -99,8 +99,8 @@ i_showSessBG  = input.bool(true,   "Session BG",      group="Sessions")
 
 // ── Design ──
 i_proTheme    = input.bool(false,  "Professional Theme (subdued)", group="Design")
-i_buyCol      = input.color(#00FF41, "Buy",           group="Design")
-i_sellCol     = input.color(#FF073A, "Sell",           group="Design")
+i_buyCol      = input.color(#4CAF50, "Buy",           group="Design")
+i_sellCol     = input.color(#F44336, "Sell",           group="Design")
 i_slCol       = input.color(#FF5252, "SL",             group="Design")
 i_tpCol       = input.color(#39FF14, "TP",             group="Design")
 i_entCol      = input.color(#FFFFFF, "Entry",           group="Design")
@@ -864,16 +864,14 @@ createSetup(int dir) =>
     array.push(d_t4,  tp4On ? line.new(bar_index, t4, rE, t4, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
     array.push(d_t5,  tp5On ? line.new(bar_index, t5, rE, t5, color=tpC, style=line.style_dotted, width=lW) : line.new(bar_index, ep, rE, ep, color=na))
 
-    // Signal label — solid BUY / SELL box (Pro Scalper style, large)
+    // Signal label — solid BUY / SELL box (1:1 reference match)
     string sTxt = dir == 1 ? "BUY" : "SELL"
-    float sY   = dir == 1 ? low - atrVal * 0.5 : high + atrVal * 0.5
+    float sY   = dir == 1 ? low : high
     color sigBg  = dir == 1 ? buyC : sellC
-    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBg, textcolor=color.white, size=size.large, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
+    array.push(d_sig, label.new(bar_index, sY, sTxt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=sigBg, textcolor=color.white, size=size.normal, tooltip="Score: " + str.tostring(sc, "#") + "%\nTrend: " + (trend == 1 ? "Bull" : "Bear") + "\nZone: " + (inDisc ? "Disc" : inPrem ? "Prem" : "EQ")))
 
-    // Score label (next to BUY/SELL)
-    color scCol2 = sc >= 80 ? buyC : sc >= 50 ? #FFD700 : sellC
-    float scY   = dir == 1 ? low - atrVal * 1.5 : high + atrVal * 1.5
-    array.push(d_scr, label.new(bar_index, scY, str.tostring(sc, "#") + "%", style=label.style_none, textcolor=scCol2, size=size.tiny))
+    // Score label (hidden for clean chart — info in tooltip)
+    array.push(d_scr, label.new(bar_index, sY, "", style=label.style_none, textcolor=na, size=size.tiny))
 
     // Price labels
     array.push(d_eLbl, sLb ? label.new(rE, ep, "ENTRY " + str.tostring(ep, format.mintick), style=label.style_label_left, color=color.new(mC, 30), textcolor=i_txtCol, size=size.small) : label.new(bar_index, ep, ""))
